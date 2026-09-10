@@ -189,7 +189,7 @@ jobs:
           node-version: '20'
 
       - name: Run ReleaseProof
-        uses: releaseproof/releaseproof@v0.1.0
+        uses: 6hp2cfrhm4-cmyk/releaseproof@v0.1.0
         with:
           fail-on-blocker: true
 

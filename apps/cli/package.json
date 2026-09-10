@@ -12,13 +12,13 @@
   "author": "ReleaseProof Team <maintainers@releaseproof.dev>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/releaseproof/releaseproof.git",
+    "url": "git+https://github.com/6hp2cfrhm4-cmyk/releaseproof.git",
     "directory": "apps/cli"
   },
   "bugs": {
-    "url": "https://github.com/releaseproof/releaseproof/issues"
+    "url": "https://github.com/6hp2cfrhm4-cmyk/releaseproof/issues"
   },
-  "homepage": "https://github.com/releaseproof/releaseproof#readme",
+  "homepage": "https://github.com/6hp2cfrhm4-cmyk/releaseproof#readme",
   "keywords": [
     "releaseproof",
     "production-readiness",
