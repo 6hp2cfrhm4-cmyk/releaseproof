@@ -1,0 +1,11 @@
+{
+  "ignoreDirs": [
+    "fixtures",
+    "benchmarks",
+    "examples"
+  ],
+  "checks": {
+    "startup": false,
+    "browser": false
+  }
+}

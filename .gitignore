@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+.releaseproof/
+.temp/
+*.log
+.turbo/
+.cache/
+coverage/
+.DS_Store
+Thumbs.db
+.env.local
+.env.*.local
+*.tsbuildinfo
+*.tgz
+fixtures/

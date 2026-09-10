@@ -1,0 +1,26 @@
+name: Bug Report
+description: Report unexpected errors, crashes, or execution failures in ReleaseProof.
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description of the Problem
+      description: What went wrong?
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS & Versions
+      description: OS version, Node.js version, and ReleaseProof version (`npx releaseproof --version`)
+      placeholder: Windows 11, Node v22.1.0, ReleaseProof v0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Stack / Logs
+      description: Paste any error messages or execution logs.
+      render: shell

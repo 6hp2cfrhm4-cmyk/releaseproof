@@ -1,0 +1,65 @@
+{
+  "name": "releaseproof",
+  "version": "0.1.0",
+  "description": "Your AI says it's done. ReleaseProof checks if it actually ships.",
+  "type": "module",
+  "bin": {
+    "releaseproof": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "license": "Apache-2.0",
+  "author": "ReleaseProof Team <maintainers@releaseproof.dev>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/releaseproof/releaseproof.git",
+    "directory": "apps/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/releaseproof/releaseproof/issues"
+  },
+  "homepage": "https://github.com/releaseproof/releaseproof#readme",
+  "keywords": [
+    "releaseproof",
+    "production-readiness",
+    "ai-agents",
+    "vibe-coding",
+    "verification-engine",
+    "nextjs",
+    "vite",
+    "fastapi",
+    "express",
+    "ci-cd"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && esbuild src/index.ts --bundle --platform=node --format=esm \"--banner:js=import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);\" --outfile=dist/index.js --external:playwright",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {},
+  "optionalDependencies": {
+    "playwright": "^1.50.1"
+  },
+  "devDependencies": {
+    "@releaseproof/core": "workspace:*",
+    "@releaseproof/detector": "workspace:*",
+    "@releaseproof/reporter": "workspace:*",
+    "@releaseproof/runner": "workspace:*",
+    "@releaseproof/schemas": "workspace:*",
+    "@types/node": "^22.13.1",
+    "commander": "^13.1.0",
+    "esbuild": "^0.28.2",
+    "picocolors": "^1.1.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

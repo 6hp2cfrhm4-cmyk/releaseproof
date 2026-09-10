@@ -1,0 +1,48 @@
+import { execFileSync } from 'node:child_process';
+
+/**
+ * Cleanly terminates a process and all of its spawned child processes.
+ * On Windows, uses taskkill /pid <PID> /T /F without a shell.
+ * On POSIX systems, sends SIGKILL to the process group or process.
+ */
+export async function killProcessTree(pid: number): Promise<void> {
+  if (!pid || pid <= 0) return;
+
+  const isWindows = process.platform === 'win32';
+
+  if (isWindows) {
+    try {
+      execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
+    } catch {
+      // Process might have already exited
+    }
+  } else {
+    try {
+      // Try killing the process group first
+      process.kill(-pid, 'SIGTERM');
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        // Already gone
+      }
+    }
+  }
+}
+
+/**
+ * Checks if a process with the given PID is currently alive.
+ */
+export function isProcessAlive(pid: number): boolean {
+  if (!pid || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err: unknown) {
+    // EPERM means process exists but we don't have permission -> it is alive
+    const code = (err as { code?: string }).code;
+    return code === 'EPERM';
+  }
+}

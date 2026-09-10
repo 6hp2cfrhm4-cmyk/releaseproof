@@ -1,0 +1,21 @@
+{
+  "name": "benchmarks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup-fixtures": "tsx setup-fixtures.ts",
+    "bench": "tsx setup-fixtures.ts && tsx run-bench.ts"
+  },
+  "dependencies": {
+    "@releaseproof/core": "workspace:*",
+    "@releaseproof/schemas": "workspace:*",
+    "@releaseproof/reporter": "workspace:*",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

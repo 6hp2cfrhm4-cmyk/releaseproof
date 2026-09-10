@@ -1,0 +1,73 @@
+name: 'ReleaseProof Verification'
+description: 'Production-readiness verification engine for AI agents and vibe-coders.'
+author: 'ReleaseProof Team'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  path:
+    description: 'Path to the project directory to verify'
+    required: false
+    default: '.'
+  port:
+    description: 'Port number to override or verify'
+    required: false
+  timeout:
+    description: 'Server startup timeout in milliseconds'
+    required: false
+    default: '30000'
+  fail-on-blocker:
+    description: 'Fail the action step if verification discovers any blockers'
+    required: false
+    default: 'true'
+
+outputs:
+  score:
+    description: 'Readiness score from 0 to 100'
+  status:
+    description: 'Verification status: READY or NOT_READY'
+  blockers-count:
+    description: 'Number of verified blockers'
+  warnings-count:
+    description: 'Number of warnings'
+  html-report:
+    description: 'Path to the generated standalone HTML report'
+  ai-fix-prompt:
+    description: 'Path to the generated AI remediation prompt'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run ReleaseProof
+      shell: bash
+      run: |
+        ARGS="--ci"
+        if [ -n "${{ inputs.port }}" ]; then
+          ARGS="$ARGS --port ${{ inputs.port }}"
+        fi
+        if [ -n "${{ inputs.timeout }}" ]; then
+          ARGS="$ARGS --timeout ${{ inputs.timeout }}"
+        fi
+        
+        echo "Running ReleaseProof on ${{ inputs.path }}..."
+        EXIT_CODE=0
+        npx releaseproof verify "${{ inputs.path }}" $ARGS || EXIT_CODE=$?
+
+        REPORT_JSON="${{ inputs.path }}/.releaseproof/report.json"
+        if [ -f "$REPORT_JSON" ] && [ -n "$GITHUB_STEP_SUMMARY" ]; then
+          node -e "
+            const fs = require('fs');
+            const r = JSON.parse(fs.readFileSync('$REPORT_JSON', 'utf-8'));
+            const statusEmoji = r.verdict === 'READY' ? '✅' : '❌';
+            let summary = '### ' + statusEmoji + ' ReleaseProof Verification: ' + r.verdict + '\n\n';
+            summary += '- **Score**: ' + r.score + ' / 100\n';
+            summary += '- **Blockers**: ' + (r.counts?.blockers ?? 0) + '\n';
+            summary += '- **Warnings**: ' + (r.counts?.warnings ?? 0) + '\n\n';
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+          "
+        fi
+
+        if [ "${{ inputs.fail-on-blocker }}" = "true" ] && [ "$EXIT_CODE" -ne 0 ]; then
+          exit $EXIT_CODE
+        fi

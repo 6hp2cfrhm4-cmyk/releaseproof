@@ -1,0 +1,31 @@
+{
+  "name": "@releaseproof/core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@releaseproof/schemas": "workspace:*",
+    "@releaseproof/runner": "workspace:*",
+    "@releaseproof/sandbox": "workspace:*",
+    "@releaseproof/detector": "workspace:*",
+    "@releaseproof/environment": "workspace:*",
+    "@releaseproof/security": "workspace:*",
+    "@releaseproof/browser": "workspace:*",
+    "@releaseproof/reporter": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "typescript": "^5.7.3"
+  }
+}

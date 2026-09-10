@@ -1,0 +1,47 @@
+name: False Positive Report
+description: Report a legitimate, working application that was incorrectly marked as NOT_READY or blocked by ReleaseProof.
+title: "[False Positive]: "
+labels: ["false-positive", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ReleaseProof operates under a strict **Zero False Blockers** engineering standard.
+        If a working application is falsely blocked, that is considered a high-priority bug.
+  - type: input
+    id: framework
+    attributes:
+      label: Framework & Runtime
+      description: What framework and versions are you using? (e.g., Next.js 14.2 App Router, Node 20, pnpm)
+      placeholder: Next.js 14.2, Node 20.10.0, pnpm 9.0
+    validations:
+      required: true
+  - type: textarea
+    id: blocked_check
+    attributes:
+      label: Incorrect Blocker(s)
+      description: Which check was incorrectly marked as a blocker?
+      placeholder: e.g. [browser] Root route returned 404 Not Found OR [environment] Server secrets exposed
+    validations:
+      required: true
+  - type: textarea
+    id: proof_of_working
+    attributes:
+      label: Proof that the Application Actually Works
+      description: How does this run successfully in actual production or staging deployments?
+      placeholder: In production on Vercel/Docker, this page serves 200 OK and is accessible.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction Steps / Minimal Code
+      description: Steps or repository link to reproduce the false blocker.
+    validations:
+      required: true
+  - type: textarea
+    id: releaseproof_output
+    attributes:
+      label: ReleaseProof Terminal Output
+      description: Paste the output of `npx releaseproof verify`.
+      render: shell

@@ -1,0 +1,33 @@
+name: ReleaseProof Action Example
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify:
+    name: Verify Production Readiness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run ReleaseProof Action
+        uses: releaseproof/releaseproof@v0.1.0
+        with:
+          path: '.'
+          fail-on-blocker: 'true'
+
+      - name: Upload ReleaseProof Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: releaseproof-report
+          path: .releaseproof/

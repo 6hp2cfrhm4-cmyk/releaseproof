@@ -1,0 +1,28 @@
+{
+  "name": "releaseproof-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Your AI says it's done. ReleaseProof checks if it actually ships.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r --filter=!benchmarks run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "pnpm -r exec tsc --noEmit",
+    "bench": "pnpm --filter benchmarks run bench",
+    "dev": "pnpm --filter releaseproof run dev",
+    "cli": "pnpm --filter releaseproof run dev",
+    "proof": "node ./apps/cli/dist/index.js verify"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

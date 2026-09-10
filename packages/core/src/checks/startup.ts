@@ -1,0 +1,122 @@
+import { CheckResult, ProcessEvidence, HttpEvidence } from '@releaseproof/schemas';
+import { spawnService, RunningService, checkHealthEndpoint } from '@releaseproof/runner';
+
+export interface StartupCheckResult {
+  checkResult: CheckResult;
+  service?: RunningService;
+  port?: number;
+}
+
+export async function runStartupCheck(
+  workspaceDir: string,
+  startCommand?: string,
+  port = 3000,
+  timeoutMs = 30000,
+  healthPath = '/'
+): Promise<StartupCheckResult> {
+  if (!startCommand) {
+    return {
+      checkResult: {
+        id: 'startup-check',
+        title: 'Production startup',
+        category: 'runtime',
+        status: 'skipped',
+        severity: 'info',
+        summary: 'No start command configured.',
+        evidence: [],
+      },
+    };
+  }
+
+  const service = spawnService(startCommand, {
+    cwd: workspaceDir,
+    env: { PORT: String(port) },
+  });
+
+  const isReady = await service.waitForPort(port, timeoutMs);
+
+  if (!isReady) {
+    const logs = service.getLogs();
+    const alive = service.isAlive();
+    await service.kill();
+
+    const evidence: ProcessEvidence = {
+      type: 'process',
+      pid: service.pid,
+      alive,
+      port,
+      listening: false,
+      stdoutTail: logs.stdout.slice(-2000),
+      stderrTail: logs.stderr.slice(-2000),
+    };
+
+    return {
+      checkResult: {
+        id: 'startup-check',
+        title: 'Production server failed to start or open port',
+        category: 'runtime',
+        status: 'block',
+        severity: 'blocker',
+        summary: alive
+          ? `Server started but port ${port} did not become ready within ${timeoutMs / 1000}s.`
+          : `Server crashed immediately on startup. Process exited before port ${port} opened.`,
+        evidence: [evidence],
+        remediation: 'Check startup logs for runtime errors, missing environment variables, or uncaught exceptions during boot.',
+      },
+    };
+  }
+
+  // Port is listening, check HTTP health
+  const healthUrl = `http://127.0.0.1:${port}${healthPath}`;
+  const health = await checkHealthEndpoint(healthUrl, 5000);
+
+  const logs = service.getLogs();
+  const procEvidence: ProcessEvidence = {
+    type: 'process',
+    pid: service.pid,
+    alive: service.isAlive(),
+    port,
+    listening: true,
+    stdoutTail: logs.stdout.slice(-1000),
+  };
+
+  const httpEvidence: HttpEvidence = {
+    type: 'http',
+    url: healthUrl,
+    method: 'GET',
+    statusCode: health.status,
+    responsePreview: health.body.slice(0, 300),
+    durationMs: health.durationMs,
+  };
+
+  if (!health.ok && health.status >= 500) {
+    return {
+      service,
+      port,
+      checkResult: {
+        id: 'startup-check',
+        title: 'Production server responded with server error on startup',
+        category: 'runtime',
+        status: 'block',
+        severity: 'blocker',
+        summary: `Application started on port ${port} but initial request to ${healthPath} failed with HTTP ${health.status}.`,
+        evidence: [procEvidence, httpEvidence],
+        remediation: 'Inspect server logs for unhandled exceptions or database connection failures during root route handling.',
+      },
+    };
+  }
+
+  return {
+    service,
+    port,
+    checkResult: {
+      id: 'startup-check',
+      title: 'Production server started and responded',
+      category: 'runtime',
+      status: 'pass',
+      severity: 'info',
+      summary: `Application successfully started on port ${port} and responded to health check with HTTP ${health.status} (${health.durationMs}ms).`,
+      evidence: [procEvidence, httpEvidence],
+    },
+  };
+}
