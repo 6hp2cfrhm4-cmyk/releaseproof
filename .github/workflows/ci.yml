@@ -49,11 +49,11 @@ jobs:
         if: runner.os != 'Linux'
         run: pnpm --filter @releaseproof/browser exec playwright install chromium
 
-      - name: Typecheck Workspace
-        run: pnpm run lint
-
       - name: Build All Packages & Bundled CLI
         run: pnpm run build
+
+      - name: Typecheck Workspace
+        run: pnpm run lint
 
       - name: Run Unit & Hardening Tests
         run: pnpm run test
