@@ -9,7 +9,7 @@ export interface FixtureDefinition {
   name: string;
   files: Record<string, string>;
   expected: {
-    expectedVerdict: 'READY' | 'NOT_READY';
+    expectedVerdict: 'READY' | 'NOT_READY' | 'INCOMPLETE';
     expectedBlockerCategory?: string;
     expectedWarningCategory?: string;
     minBlockers?: number;
@@ -546,6 +546,104 @@ export const allFixtures: FixtureDefinition[] = [
     },
     expected: { expectedVerdict: 'READY', minBlockers: 0 },
   },
+
+  // 37. Environment Blocked: external PostgreSQL instance required
+  {
+    name: 'env-blocked-postgres',
+    files: {
+      'package.json': JSON.stringify({
+        name: 'env-blocked-postgres',
+        dependencies: { express: '^4.19.2', pg: '^8.11.0' },
+        scripts: {
+          start: 'node -e "console.error(\'ConnectionRefusedError: connect ECONNREFUSED 127.0.0.1:5432\'); process.exit(1)"',
+        },
+      }),
+      'index.js': 'const express = require("express");',
+    },
+    expected: { expectedVerdict: 'INCOMPLETE', minBlockers: 0 },
+  },
+
+  // 38. Environment Blocked: external MongoDB instance required
+  {
+    name: 'env-blocked-mongodb',
+    files: {
+      'package.json': JSON.stringify({
+        name: 'env-blocked-mongodb',
+        dependencies: { express: '^4.19.2', mongoose: '^8.0.0' },
+        scripts: {
+          start: 'node -e "console.error(\'MongooseServerSelectionError: connect ECONNREFUSED 127.0.0.1:27017\'); process.exit(1)"',
+        },
+      }),
+      'index.js': 'const express = require("express");',
+    },
+    expected: { expectedVerdict: 'INCOMPLETE', minBlockers: 0 },
+  },
+
+  // 39. Environment Blocked: external Redis instance required
+  {
+    name: 'env-blocked-redis',
+    files: {
+      'package.json': JSON.stringify({
+        name: 'env-blocked-redis',
+        dependencies: { express: '^4.19.2', ioredis: '^5.3.0' },
+        scripts: {
+          start: 'node -e "console.error(\'Error: Redis connection to 127.0.0.1:6379 failed - connect ECONNREFUSED 127.0.0.1:6379\'); process.exit(1)"',
+        },
+      }),
+      'index.js': 'const express = require("express");',
+    },
+    expected: { expectedVerdict: 'INCOMPLETE', minBlockers: 0 },
+  },
+
+  // 40. Environment Blocked: third-party API credential (Clerk auth)
+  {
+    name: 'env-blocked-third-party-api',
+    files: {
+      'package.json': JSON.stringify({
+        name: 'env-blocked-third-party-api',
+        dependencies: { '@clerk/nextjs': '^5.0.0', next: '14.2.0' },
+        scripts: {
+          build: 'node -e "process.exit(0)"',
+          start: 'node -e "console.error(\'ClerkPublishableKeyError: Missing publishableKey. Set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY\'); process.exit(1)"',
+        },
+      }),
+      'app/layout.tsx': 'export default function Layout() {}',
+    },
+    expected: { expectedVerdict: 'INCOMPLETE', minBlockers: 0 },
+  },
+
+  // 41. Environment Blocked: optional Stripe integration credential
+  {
+    name: 'env-blocked-optional-stripe',
+    files: {
+      'package.json': JSON.stringify({
+        name: 'env-blocked-optional-stripe',
+        dependencies: { stripe: '^14.0.0', express: '^4.19.2' },
+        scripts: {
+          start: 'node -e "console.error(\'StripeInitializationError: No API key provided. Set STRIPE_SECRET_KEY in environment\'); process.exit(1)"',
+        },
+      }),
+      'server.js': 'const express = require("express");',
+    },
+    expected: { expectedVerdict: 'INCOMPLETE', minBlockers: 0 },
+  },
+
+  // 42. Environment Blocked: optional OAuth provider (NextAuth secret)
+  {
+    name: 'env-blocked-oauth-provider',
+    files: {
+      'package.json': JSON.stringify({
+        name: 'env-blocked-oauth-provider',
+        dependencies: { 'next-auth': '^4.24.0', next: '14.2.0' },
+        scripts: {
+          build: 'node -e "process.exit(0)"',
+          start: 'node -e "console.error(\'[next-auth][error][NO_SECRET]: Missing NEXTAUTH_SECRET. In production, this environment variable is required.\'); process.exit(1)"',
+        },
+      }),
+      'pages/api/auth/[...nextauth].ts': 'export default function auth() {}',
+    },
+    expected: { expectedVerdict: 'INCOMPLETE', minBlockers: 0 },
+  },
 ];
 
 export async function setupFixtures(): Promise<void> {
@@ -565,7 +663,7 @@ export async function setupFixtures(): Promise<void> {
     await fs.writeFile(expectedPath, JSON.stringify(fixture.expected, null, 2), 'utf-8');
   }
 
-  console.log(`✓ Successfully configured ${allFixtures.length} test fixtures in ${fixturesRoot}`);
+  console.log(`✓ Successfully configured ${allFixtures.length} test fixtures in fixtures/`);
 }
 
 if (process.argv[1] && process.argv[1].endsWith('setup-fixtures.ts')) {

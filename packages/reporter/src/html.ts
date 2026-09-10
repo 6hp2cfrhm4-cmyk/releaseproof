@@ -101,6 +101,10 @@ export function generateHtmlReport(report: VerificationReport): string {
       background: var(--green-bg);
       border-color: var(--green);
     }
+    .verdict-banner.incomplete {
+      background: var(--yellow-bg);
+      border-color: var(--yellow);
+    }
     .verdict-banner.not-ready {
       background: var(--red-bg);
       border-color: var(--red);
@@ -207,6 +211,9 @@ export function generateHtmlReport(report: VerificationReport): string {
     .issue-card.warn {
       border-left: 4px solid var(--yellow);
     }
+    .issue-card.unknown {
+      border-left: 4px solid var(--blue);
+    }
     .issue-card.pass {
       border-left: 4px solid var(--green);
     }
@@ -225,7 +232,9 @@ export function generateHtmlReport(report: VerificationReport): string {
     }
     .badge-blocker { background: var(--red-bg); color: var(--red); }
     .badge-warn { background: var(--yellow-bg); color: var(--yellow); }
+    .badge-unknown { background: rgba(88, 166, 255, 0.15); color: var(--blue); }
     .badge-pass { background: var(--green-bg); color: var(--green); }
+    .status-unknown { color: var(--blue); }
     .issue-title {
       font-size: 1rem;
       font-weight: 600;
@@ -281,15 +290,15 @@ export function generateHtmlReport(report: VerificationReport): string {
       </div>
     </header>
 
-    <div class="verdict-banner ${isReady ? 'ready' : 'not-ready'}">
+    <div class="verdict-banner ${report.verdict === 'READY' ? 'ready' : report.verdict === 'INCOMPLETE' ? 'incomplete' : 'not-ready'}">
       <div>
-        <div class="verdict-title">${report.verdict === 'READY' ? 'READY TO SHIP' : 'NOT READY TO SHIP'}</div>
+        <div class="verdict-title">${report.verdict === 'READY' ? 'READY TO SHIP' : report.verdict === 'INCOMPLETE' ? 'VERIFICATION INCOMPLETE' : 'NOT READY TO SHIP'}</div>
         <div class="verdict-subtitle">
-          ${report.counts.blockers} Blocker(s) &bull; ${report.counts.warnings} Warning(s) &bull; ${report.counts.passed} Passed
+          ${report.counts.blockers} Blocker(s) &bull; ${report.counts.warnings} Warning(s) &bull; ${report.counts.unknown || 0} External Dependency(ies) &bull; ${report.counts.passed} Passed
         </div>
       </div>
       <div>
-        <div class="score-badge" style="color: ${isReady ? 'var(--green)' : 'var(--red)'}">${report.score}</div>
+        <div class="score-badge" style="color: ${report.verdict === 'READY' ? 'var(--green)' : report.verdict === 'INCOMPLETE' ? 'var(--yellow)' : 'var(--red)'}">${report.score}</div>
         <div class="score-label">Release Score / 100</div>
       </div>
     </div>
@@ -299,7 +308,7 @@ export function generateHtmlReport(report: VerificationReport): string {
         .map(([cat, val]) => `
         <div class="category-card">
           <div class="category-name">${escapeHtml(cat)}</div>
-          <div class="category-status status-${(val?.status || 'pass') === 'pass' ? 'pass' : (val?.status || 'pass') === 'warn' ? 'warn' : (val?.status || 'pass') === 'skipped' ? 'skip' : 'fail'}">
+          <div class="category-status status-${(val?.status || 'pass') === 'pass' ? 'pass' : (val?.status || 'pass') === 'warn' ? 'warn' : (val?.status || 'pass') === 'unknown' ? 'unknown' : (val?.status || 'pass') === 'skipped' ? 'skip' : 'fail'}">
             ${(val?.status || 'pass').toUpperCase()}
           </div>
           <div class="category-score">${val?.score ?? 0} / ${val?.max ?? 0} pts</div>
@@ -315,10 +324,11 @@ export function generateHtmlReport(report: VerificationReport): string {
       ${report.checks
         .map((chk) => {
           const isBlocker = chk.severity === 'blocker' || chk.status === 'block';
+          const isUnknown = chk.status === 'unknown';
           const isWarn = chk.status === 'warn' || chk.severity === 'high';
-          const cardClass = isBlocker ? 'blocker' : isWarn ? 'warn' : 'pass';
-          const badgeClass = isBlocker ? 'badge-blocker' : isWarn ? 'badge-warn' : 'badge-pass';
-          const badgeText = isBlocker ? 'BLOCKER' : isWarn ? 'WARN' : 'PASS';
+          const cardClass = isBlocker ? 'blocker' : isUnknown ? 'unknown' : isWarn ? 'warn' : 'pass';
+          const badgeClass = isBlocker ? 'badge-blocker' : isUnknown ? 'badge-unknown' : isWarn ? 'badge-warn' : 'badge-pass';
+          const badgeText = isBlocker ? 'BLOCKER' : isUnknown ? 'EXTERNAL' : isWarn ? 'WARN' : 'PASS';
 
           return `
           <div class="issue-card ${cardClass}">

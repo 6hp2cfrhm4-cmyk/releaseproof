@@ -1,5 +1,6 @@
 import { CheckResult, ProcessEvidence, HttpEvidence } from '@releaseproof/schemas';
 import { spawnService, RunningService, checkHealthEndpoint } from '@releaseproof/runner';
+import { detectExternalServiceDependency } from './external-services.js';
 
 export interface StartupCheckResult {
   checkResult: CheckResult;
@@ -50,6 +51,28 @@ export async function runStartupCheck(
       stderrTail: logs.stderr.slice(-2000),
     };
 
+    const combinedLogs = `${logs.stdout}\n${logs.stderr}`;
+    const extDep = detectExternalServiceDependency(combinedLogs);
+
+    if (extDep) {
+      return {
+        checkResult: {
+          id: 'startup-check',
+          title: `Verification incomplete: ${extDep.name} required`,
+          category: 'runtime',
+          status: 'unknown',
+          severity: 'medium',
+          summary: `${extDep.reason} ReleaseProof could not verify runtime startup because external infrastructure was not configured.`,
+          evidence: [evidence],
+          remediation: extDep.remediation,
+          metadata: {
+            requiresExternalService: true,
+            service: extDep.name,
+          },
+        },
+      };
+    }
+
     return {
       checkResult: {
         id: 'startup-check',
@@ -90,6 +113,30 @@ export async function runStartupCheck(
   };
 
   if (!health.ok && health.status >= 500) {
+    const combinedOutput = `${logs.stdout}\n${logs.stderr}\n${health.body}`;
+    const extDep = detectExternalServiceDependency(combinedOutput);
+
+    if (extDep) {
+      return {
+        service,
+        port,
+        checkResult: {
+          id: 'startup-check',
+          title: `Verification incomplete: ${extDep.name} required`,
+          category: 'runtime',
+          status: 'unknown',
+          severity: 'medium',
+          summary: `Root route returned HTTP ${health.status} due to missing external infrastructure (${extDep.name}). ReleaseProof could not verify runtime health.`,
+          evidence: [procEvidence, httpEvidence],
+          remediation: extDep.remediation,
+          metadata: {
+            requiresExternalService: true,
+            service: extDep.name,
+          },
+        },
+      };
+    }
+
     return {
       service,
       port,

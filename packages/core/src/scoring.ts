@@ -67,12 +67,17 @@ export function computeScore(checks: CheckResult[]): ScoreComputationResult {
     if (catChecks.length === 0) continue;
 
     const hasBlock = catChecks.some((c) => c.status === 'block' || c.severity === 'blocker');
+    const hasUnknown = catChecks.some((c) => c.status === 'unknown');
     const hasWarn = catChecks.some((c) => c.status === 'warn' || c.severity === 'high');
     const allSkipped = catChecks.every((c) => c.status === 'skipped');
 
     if (hasBlock) {
       categoryScores[cat].score = 0;
       categoryScores[cat].status = 'fail';
+    } else if (hasUnknown) {
+      // Incomplete verification for this category: score is 50% max weight
+      categoryScores[cat].score = Math.round(CATEGORY_WEIGHTS[cat] * 0.5);
+      categoryScores[cat].status = 'unknown';
     } else if (hasWarn) {
       categoryScores[cat].score = Math.round(CATEGORY_WEIGHTS[cat] * 0.5);
       categoryScores[cat].status = 'warn';
@@ -89,8 +94,16 @@ export function computeScore(checks: CheckResult[]): ScoreComputationResult {
     totalScore += categoryScores[cat].score;
   }
 
-  // A blocker ALWAYS yields NOT_READY
-  const verdict: VerificationVerdict = blockers > 0 ? 'NOT_READY' : 'READY';
+  // Deterministic Verdict Policy:
+  // 1. If any blocker exists -> NOT_READY (proven failure)
+  // 2. If 0 blockers but unknown checks exist (external infrastructure missing) -> INCOMPLETE
+  // 3. If 0 blockers and 0 unknown -> READY
+  let verdict: VerificationVerdict = 'READY';
+  if (blockers > 0) {
+    verdict = 'NOT_READY';
+  } else if (unknown > 0) {
+    verdict = 'INCOMPLETE';
+  }
 
   return {
     score: Math.min(100, Math.max(0, totalScore)),

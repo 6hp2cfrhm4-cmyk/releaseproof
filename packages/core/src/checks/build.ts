@@ -1,5 +1,6 @@
 import { CheckResult, CommandEvidence } from '@releaseproof/schemas';
 import { execCommand } from '@releaseproof/runner';
+import { detectExternalServiceDependency } from './external-services.js';
 
 export async function runBuildCheck(
   workspaceDir: string,
@@ -40,6 +41,26 @@ export async function runBuildCheck(
       severity: 'info',
       summary: `Production build command \`${buildCommand}\` completed successfully in ${Math.round(result.durationMs / 1000)}s.`,
       evidence: [evidence],
+    };
+  }
+
+  const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  const extDep = detectExternalServiceDependency(combinedOutput);
+
+  if (extDep) {
+    return {
+      id: 'build-check',
+      title: `Verification incomplete: ${extDep.name} required during build`,
+      category: 'build',
+      status: 'unknown',
+      severity: 'medium',
+      summary: `Build command \`${buildCommand}\` failed because an external service (${extDep.name}) was unreachable during static page generation.`,
+      evidence: [evidence],
+      remediation: extDep.remediation,
+      metadata: {
+        requiresExternalService: true,
+        service: extDep.name,
+      },
     };
   }
 

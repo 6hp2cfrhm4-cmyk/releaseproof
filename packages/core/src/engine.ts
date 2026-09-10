@@ -207,32 +207,39 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
   const scoreResult = computeScore(allChecks);
   const durationMs = Date.now() - startTime;
   const reportId = randomBytes(6).toString('hex');
+  const relProjectPath = (path.relative(process.cwd(), projectDir) || '.').replace(/\\/g, '/');
+  const relArtifactsDir = (path.relative(process.cwd(), artifactsDir) || '.releaseproof').replace(/\\/g, '/');
+  const relJsonPath = path.posix.join(relArtifactsDir, 'report.json');
+  const relHtmlPath = path.posix.join(relArtifactsDir, 'report.html');
+  const relFixPath = path.posix.join(relArtifactsDir, 'RELEASEPROOF_FIX.md');
 
   const rawReport: VerificationReport = {
     id: reportId,
     version: '0.1.0',
     timestamp: new Date().toISOString(),
     projectName: profile.name,
-    projectPath: projectDir,
-    profile,
+    projectPath: relProjectPath,
+    profile: {
+      ...profile,
+      root: relProjectPath,
+    },
     verdict: scoreResult.verdict,
     score: scoreResult.score,
     categoryScores: scoreResult.categoryScores,
     counts: scoreResult.counts,
     checks: allChecks,
     durationMs,
-    artifactsDir,
-    jsonReportPath: path.join(artifactsDir, 'report.json'),
-    htmlReportPath: path.join(artifactsDir, 'report.html'),
-    fixPromptPath: path.join(artifactsDir, 'RELEASEPROOF_FIX.md'),
+    artifactsDir: relArtifactsDir,
+    jsonReportPath: relJsonPath,
+    htmlReportPath: relHtmlPath,
+    fixPromptPath: relFixPath,
   };
 
   const report = redactObject(rawReport);
 
-  // Save JSON report
-  if (report.jsonReportPath) {
-    await fs.writeFile(report.jsonReportPath, JSON.stringify(report, null, 2), 'utf-8');
-  }
+  // Save JSON report using absolute path on disk
+  const absoluteJsonPath = path.join(artifactsDir, 'report.json');
+  await fs.writeFile(absoluteJsonPath, JSON.stringify(report, null, 2), 'utf-8');
 
   return report;
 }

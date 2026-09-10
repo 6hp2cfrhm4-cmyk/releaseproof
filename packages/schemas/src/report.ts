@@ -5,11 +5,11 @@ import { ProjectProfileSchema } from './profile.js';
 export const CategoryScoreSchema = z.object({
   max: z.number(),
   score: z.number(),
-  status: z.enum(['pass', 'warn', 'fail', 'skipped']),
+  status: z.enum(['pass', 'warn', 'fail', 'skipped', 'unknown']),
 });
 export type CategoryScore = z.infer<typeof CategoryScoreSchema>;
 
-export const VerificationVerdictSchema = z.enum(['READY', 'NOT_READY']);
+export const VerificationVerdictSchema = z.enum(['READY', 'NOT_READY', 'INCOMPLETE']);
 export type VerificationVerdict = z.infer<typeof VerificationVerdictSchema>;
 
 export const VerificationReportSchema = z.object({

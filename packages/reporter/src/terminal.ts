@@ -7,7 +7,16 @@ export function formatTerminalReport(report: VerificationReport): string {
 
   lines.push('');
   lines.push(`${pc.bold('ReleaseProof')} ${pc.dim(`v${report.version}`)}`);
-  lines.push(pc.dim(`Project: ${report.projectName} (${report.projectPath})`));
+  const projectDisplay = (!report.projectPath || report.projectPath === '.' || report.projectPath === report.projectName)
+    ? report.projectName
+    : `${report.projectName} (${report.projectPath})`;
+  lines.push(pc.dim(`Project: ${projectDisplay}`));
+
+  if (report.profile?.frameworks?.length) {
+    const stackStr = report.profile.frameworks.map((f) => f.name).join(', ');
+    const pmStr = report.profile.packageManagers?.map((p) => p.type).join(', ') || 'npm';
+    lines.push(pc.dim(`Stack:   ${stackStr} (${pmStr})`));
+  }
   lines.push(divider);
 
   // Big Verdict Banner
@@ -17,6 +26,12 @@ export function formatTerminalReport(report: VerificationReport): string {
         '  ' +
         pc.bold(pc.green(`${report.score} / 100`))
     );
+  } else if (report.verdict === 'INCOMPLETE') {
+    lines.push(
+      pc.bold(pc.bgYellow(pc.black(' VERIFICATION INCOMPLETE '))) +
+        '  ' +
+        pc.bold(pc.yellow(`${report.score} / 100`))
+    );
   } else {
     lines.push(
       pc.bold(pc.bgRed(pc.white(' NOT READY TO SHIP '))) +
@@ -25,10 +40,14 @@ export function formatTerminalReport(report: VerificationReport): string {
     );
   }
 
+  const unknownCount = report.counts.unknown || 0;
+  const unknownText = unknownCount > 0 ? `${pc.cyan(String(unknownCount) + (unknownCount === 1 ? ' external dependency' : ' external dependencies'))} · ` : '';
+
   lines.push(
     pc.dim(
       `${pc.red(String(report.counts.blockers) + ' blockers')} · ` +
         `${pc.yellow(String(report.counts.warnings) + ' warnings')} · ` +
+        unknownText +
         `${pc.green(String(report.counts.passed) + ' passed')} · ` +
         `${(report.durationMs / 1000).toFixed(1)}s`
     )
@@ -43,6 +62,7 @@ export function formatTerminalReport(report: VerificationReport): string {
     let statusBadge = pc.green('PASS');
     if (data.status === 'fail') statusBadge = pc.red('FAIL');
     else if (data.status === 'warn') statusBadge = pc.yellow('WARN');
+    else if (data.status === 'unknown') statusBadge = pc.cyan('UNKN');
     else if (data.status === 'skipped') statusBadge = pc.dim('SKIP');
 
     lines.push(`  ${paddedCat} ${statusBadge}  ${pc.dim(scoreStr)}`);
@@ -86,6 +106,20 @@ export function formatTerminalReport(report: VerificationReport): string {
 
       if (b.remediation) {
         lines.push(pc.cyan(`    Fix: ${b.remediation}`));
+      }
+    }
+  }
+
+  // Highlight External Dependencies (Unknown)
+  const unknowns = report.checks.filter((c) => c.status === 'unknown');
+  if (unknowns.length > 0) {
+    lines.push('');
+    lines.push(pc.bold(pc.cyan(`Requires External Infrastructure (${unknowns.length}):`)));
+    for (const u of unknowns) {
+      lines.push(`  ? [${u.category}] ${pc.bold(u.title)}`);
+      lines.push(`    ${pc.white(u.summary)}`);
+      if (u.remediation) {
+        lines.push(pc.dim(`    Config: ${u.remediation}`));
       }
     }
   }

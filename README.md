@@ -1,69 +1,86 @@
-<div align="center">
+# ReleaseProof
 
-# 🛡️ ReleaseProof
+Your AI says it's done.  
+ReleaseProof checks if it actually ships.
 
-**Your AI says it's done. ReleaseProof checks if it actually ships.**
-
-[![CI](https://github.com/releaseproof/releaseproof/actions/workflows/ci.yml/badge.svg)](https://github.com/releaseproof/releaseproof/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![npm version](https://img.shields.io/npm/v/releaseproof.svg)](https://www.npmjs.com/package/releaseproof)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
-
-Autonomous production-readiness verification engine for AI agents and vibe-coders.
-
-[Key Features](#key-features) •
-[Quickstart](#quickstart) •
-[Verification Pipeline](#verification-pipeline) •
-[The Proof Model](#the-proof-model) •
-[CLI Reference](#cli-reference) •
-[GitHub Action](#github-action)
-
-</div>
-
----
-
-## ⚡ Why ReleaseProof?
-
-AI coding assistants (Claude Code, Cursor, Copilot, Codex, Devin) build features at incredible speeds. But **"it runs in dev" is not "it ships to production"**:
-
-- **Dev vs Prod Mismatches**: A package imported at runtime was mistakenly installed under `devDependencies`. It works locally with full node_modules, but crashes with `MODULE_NOT_FOUND` in Docker or Vercel.
-- **Client-Exposed Secrets**: An AI configured `NEXT_PUBLIC_STRIPE_SECRET_KEY` or `VITE_SUPABASE_SERVICE_ROLE`, broadcasting private keys straight to end-user browsers.
-- **Silent 500 Crashes & Blank Pages**: Next.js App Router or Vite compiles, but navigating to `/dashboard` renders a React error boundary, an uncaught TypeError, or a blank DOM.
-- **Stale Documentation**: The AI modified build arguments or ports, but left the README documenting non-existent commands.
-
-**ReleaseProof is the reality check between AI code generation and deployment.** It doesn't give opinions—it extracts **verifiable proofs**: real builds, real clean-room sandboxes, real headless browser sessions, and real process lifecycles.
-
-```
-┌────────────────────────────────────┐
-│            ReleaseProof            │
-│                                    │
-│        VIBE CHECK: 98 / 100        │
-│                                    │
-│  Install           PASS            │
-│  Build             PASS            │
-│  Production        PASS            │
-│  Browser           PASS            │
-│  Environment       PASS            │
-│  Security          PASS            │
-│                                    │
-│           READY TO SHIP            │
-└────────────────────────────────────┘
-```
-
----
-
-## 🚀 Quickstart
-
-Run ReleaseProof instantly on any repository without installing:
+**Vibe code. Verify before you ship.**
 
 ```bash
-# Run full verification pipeline on current directory
+npx releaseproof
+```
+
+```
+ReleaseProof v0.1.0
+Project: my-saas-app
+Stack:   Next.js 14 (pnpm)
+──────────────────────────────────────────────────
+ NOT READY TO SHIP   50 / 100
+2 blockers · 1 warnings · 5 passed · 6.2s
+──────────────────────────────────────────────────
+Categories:
+  install         PASS   15/15
+  build           PASS   15/15
+  runtime         FAIL    0/20
+  browser         FAIL    0/15
+  api             PASS   10/10
+  environment     FAIL    0/10
+  documentation   PASS     5/5
+  security        PASS   10/10
+
+Verified Blockers (2):
+  ✗ [environment] Server secrets exposed to client-side bundle
+    NEXT_PUBLIC_STRIPE_SECRET_KEY leaks live payment credentials into client JS.
+    Fix: Rename to STRIPE_SECRET_KEY and consume exclusively in server routes.
+
+  ✗ [runtime] Production server crashed on startup
+    Error: Cannot find module 'jsonwebtoken' (in production NODE_ENV).
+    Fix: Move 'jsonwebtoken' from devDependencies to dependencies in package.json.
+
+Artifacts:
+  JSON Report:   .releaseproof/report.json
+  HTML Report:   .releaseproof/report.html
+  AI Fix Prompt: .releaseproof/RELEASEPROOF_FIX.md
+```
+
+---
+
+## 1. Why
+
+AI coding agents (Claude Code, Cursor, Copilot, Codex, Devin) build working prototypes in minutes. But **"it works in local dev mode" does not mean "it ships to production"**:
+
+- **Dev vs Prod Mismatches**: A package imported by runtime server code was placed in `devDependencies`. It runs locally because `node_modules` is dirty, but crashes with `MODULE_NOT_FOUND` in production containers.
+- **Client-Exposed Secrets**: An AI created `NEXT_PUBLIC_STRIPE_SECRET_KEY` or `VITE_SUPABASE_SERVICE_ROLE`, baking private backend keys directly into browser JavaScript bundles.
+- **Silent Runtime Crashes**: The build succeeded, but the production server crashes on startup or renders a React error boundary when accessed via headless browser.
+- **README Drift**: The AI updated CLI arguments or ports, but left contradictory instructions in `README.md`.
+
+**ReleaseProof is the production readiness verifier for AI-built and traditionally-built applications.**
+
+AI coding agent:  
+> *"Your app is done."*
+
+ReleaseProof:  
+> *"Let's prove it."*
+
+---
+
+## 2. Quick Start
+
+Run ReleaseProof in any repository with zero configuration:
+
+```bash
+# Run full clean-room verification pipeline on current directory
 npx releaseproof
 
-# Quick terminal vibe card for social sharing or chat
+# Run verification on a specific project directory
+npx releaseproof verify ./path/to/project
+
+# View the interactive HTML report in your browser
+npx releaseproof report
+
+# Generate a shareable terminal card
 npx releaseproof vibe
 
-# Check host environment capabilities (Node, Python, Docker)
+# Check your environment prerequisites (Node, Python, Docker)
 npx releaseproof doctor
 ```
 
@@ -76,214 +93,166 @@ releaseproof verify
 
 ---
 
-## ⏱️ The 15-Second Reality Check
+## 3. What ReleaseProof Checks
 
+ReleaseProof operates an isolated 9-phase verification pipeline:
+
+| Phase | What ReleaseProof Proves |
+| :--- | :--- |
+| **Clean-Room Isolation** | Copies project into an ephemeral sandbox, stripping dirty `node_modules`, `.next`, `dist`, and uncommitted build artifacts. |
+| **Clean Installation** | Runs a fresh install using the detected package manager (`npm`, `pnpm`, `yarn`, `pip`, `uv`). |
+| **Production Build** | Executes the exact production compilation command (`next build`, `vite build`, etc.). |
+| **Production Startup** | Launches the production server, verifies port binding within timeout, and ensures background process tree cleanup. |
+| **Browser & HTTP Crawl** | Crawls entrypoints using headless Playwright (or native HTTP crawler fallback), checking for HTTP 500s, console errors, and blank pages. |
+| **Environment Audit** | Scans AST for `process.env.*` usages, verifying variables are documented in `.env.example` and no private server secrets use client prefixes. |
+| **Security Secrets** | Scans for 12 hardcoded credential patterns (Stripe, GitHub tokens, AWS keys, JWTs) with automatic redaction. |
+| **README as Contract** | Parses command blocks in `README.md` and verifies documented commands match actual scripts in `package.json`. |
+| **Scoring & AI Handoff** | Computes a weighted 0-100 score, determines verdict, and generates `.releaseproof/RELEASEPROOF_FIX.md`. |
+
+---
+
+## 4. Understanding Verdicts
+
+ReleaseProof never gives a false pass, and crucially, **it does not falsely accuse working code of being broken when external cloud infrastructure is missing**:
+
+- 🟢 **`READY TO SHIP`**: All checks passed. Zero blockers, zero unverified dependencies. Clean to deploy.
+- 🟡 **`VERIFICATION INCOMPLETE`**: Application code, build, and configuration are valid, but runtime smoke testing requires external infrastructure (e.g. PostgreSQL, MongoDB, Redis, or live SaaS credentials like Stripe or Clerk) that was not configured locally.
+- 🔴 **`NOT READY TO SHIP`**: Verified code, build, dependency, or security failure. Production deployment will fail.
+
+---
+
+## 5. Example Finding: AI Fix Handoff
+
+When verification encounters issues, ReleaseProof automatically writes `.releaseproof/RELEASEPROOF_FIX.md` formatted specifically for AI coding agents:
+
+```markdown
+# ReleaseProof Fix Task
+The application failed production-readiness verification.
+Your job is to fix ONLY the verified issues below. Do not refactor unrelated code.
+
+## Issue 1: Server secrets exposed to client-side bundle
+**Severity**: BLOCKER
+**Category**: environment
+### Problem
+Found 1 sensitive secret variable with client-facing prefix: NEXT_PUBLIC_STRIPE_SECRET_KEY
+### Verified Evidence
+```
+Variable: NEXT_PUBLIC_STRIPE_SECRET_KEY
+Used in: src/app/api/checkout/route.ts:4
+Documented in: .env.example
+Exposed to client: true
+```
+### Fix
+Rename to STRIPE_SECRET_KEY and consume only on server side.
+```
+
+Feed this directly back into Claude Code, Cursor, or Devin:
 ```bash
-# 1. You run dev mode — looks fine!
-$ npm run dev
-  SaaS Dashboard running at http://127.0.0.1:3000 (NODE_ENV=development)
-  Ready in 150ms. (Looks like it works!)
-
-# 2. You run ReleaseProof before deploying:
-$ npx releaseproof
-ReleaseProof v0.1.0
-Project: saas-dashboard-ai
-──────────────────────────────────────────────────
- NOT READY TO SHIP   50 / 100
-4 blockers · 2 warnings · 4 passed · 4.7s
-──────────────────────────────────────────────────
-Verified Blockers (4):
-
-  ✗ [environment] Server secrets exposed to client-side bundle
-    Found 1 sensitive secret variable(s) with client-facing prefixes (NEXT_PUBLIC_STRIPE_SECRET_KEY).
-    Variable: NEXT_PUBLIC_STRIPE_SECRET_KEY (used in: server.js)
-    Fix: Do not prefix server-only credentials with client prefixes like NEXT_PUBLIC_ or VITE_. Access them on the server side.
-
-  ✗ [runtime] Runtime dependency declared only in devDependencies
-    Found 1 runtime package(s) mistakenly placed in devDependencies: jsonwebtoken. This works locally with full node_modules but will crash in production!
-    File: server.js:4 — Package 'jsonwebtoken' is imported at runtime but only declared in devDependencies.
-    Fix: Move packages to 'dependencies' via: npm install jsonwebtoken --save-prod
-
-  ✗ [browser] HTTP 500 Internal Server Errors encountered
-    Encountered 1 HTTP 500 error(s) during route exploration.
-    Evidence: HTTP 500 on http://127.0.0.1:3000/dashboard
-    Fix: Check server logs for the crashed handler and ensure required services or environment variables are available.
-
-  ✗ [documentation] README documents non-existent script command(s)
-    README instructions claim `npm run start:prod`, but this script does not exist in package.json.
-    File: README.md — Documented missing script(s): start:prod
-    Fix: Add the missing script to package.json "scripts" or update README.md instructions.
-
-Warnings (2):
-  ! [environment] Undocumented environment variables: Found 2 environment variable(s) used in code but missing from .env.example: STRIPE_SECRET_KEY, NEXT_PUBLIC_STRIPE_SECRET_KEY.
-  ! [browser] Console errors logged during execution: Observed 1 route(s) logging console errors: /dashboard.
-
-──────────────────────────────────────────────────
-Artifacts:
-  JSON Report:   .releaseproof/report.json
-  HTML Report:   .releaseproof/report.html
-  AI Fix Prompt: .releaseproof/RELEASEPROOF_FIX.md
+claude "Read .releaseproof/RELEASEPROOF_FIX.md and fix only the verified issues."
 ```
 
 ---
 
-## 🔍 Verification Pipeline
+## 6. Supported Stacks
 
-ReleaseProof executes a deterministic 9-phase audit:
+ReleaseProof automatically detects and adapts to:
 
-```
-1. Profile Detection       → Next.js, Vite, Express, FastAPI, Generic Node/Python
-2. Secret & Env Audit      → Private keys, cloud tokens, client-side secret exposure
-3. Clean-Room Sandbox      → Isolated temporary directory without stale artifacts
-4. Dependency Install      → Clean installation simulating fresh CI/Docker build
-5. Production Build        → `npm run build` / production bundler compilation
-6. Production Startup      → Real daemon spawn with port detection and timeout guards
-7. Headless Route Crawl    → Playwright Chromium route exploration & DOM verification
-8. Contract Verification   → Validates README commands and port bindings match code
-9. Score & AI Handoff      → 0-100 score, offline HTML report, `.releaseproof/RELEASEPROOF_FIX.md`
-```
+- **Next.js**: App Router, Pages Router, standalone output, static export (`npm`, `pnpm`, `yarn`).
+- **React + Vite**: Single-page applications, client routing, preview servers.
+- **Express.js / Node.js**: REST APIs, full-stack monoliths, custom microservices.
+- **FastAPI / Python**: Uvicorn servers, ASGI endpoints, virtual environments (`pip`, `uv`).
+- **Generic Node.js / HTML**: Any application declaring standard `build` or `start` scripts.
 
 ---
 
-## 🎯 Supported Stacks
+## 7. GitHub Action
 
-ReleaseProof includes zero-configuration detectors and runners for:
+Add ReleaseProof to your CI pipeline in `.github/workflows/releaseproof.yml`:
 
-| Framework / Stack | Build Verification | Server Startup | Route Verification | Dev/Prod Validation |
-| :--- | :---: | :---: | :---: | :---: |
-| **Next.js** (App & Pages) | ✅ `next build` | ✅ `next start` | ✅ Playwright Crawler | ✅ Runtime imports |
-| **React + Vite** | ✅ `vite build` | ✅ `vite preview` | ✅ Playwright Crawler | ✅ Client env prefixes |
-| **Express.js** | ✅ Bundler check | ✅ Node cluster | ✅ HTTP / Browser | ✅ `devDependencies` check |
-| **FastAPI** (Python) | ✅ Module imports | ✅ `uvicorn` | ✅ HTTP / OpenAPI | ✅ `requirements.txt` |
-| **Generic Node / Web** | ✅ Configured build | ✅ Custom script | ✅ Route exploration | ✅ Symlink safety |
+```yaml
+name: ReleaseProof Verification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run ReleaseProof
+        uses: releaseproof/releaseproof@v0.1.0
+        with:
+          fail-on-blocker: true
+
+      - name: Upload Verification Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: releaseproof-report
+          path: .releaseproof/
+```
+
+The action automatically posts an interactive status summary to `$GITHUB_STEP_SUMMARY`.
 
 ---
 
-## 🛡️ Zero False Blockers: The Proof Model
+## 8. Benchmark Matrix
 
-ReleaseProof operates under a strict **Zero False Blockers** engineering mandate:
-
-> **"If it ships, ReleaseProof will never block it. If it blocks, it delivers undeniable proof."**
-
-- **No Mocking**: Every check runs real subprocesses with real network sockets and real DOM evaluation.
-- **Nuanced Classifications**:
-  - `401 Unauthorized` / `403 Forbidden` on protected routes are classified as **Info/Pass** (auth boundaries), never blockers.
-  - Non-root `404` for missing favicons or decorative images are classified as **Low Warnings**, never blockers.
-  - Console warnings (`console.warn`) and non-fatal logs are classified as **Warnings**, never blockers.
-  - **Blockers require hard evidence**: process exit != 0, unhandled exceptions (`pageerror`), 5xx crashes, blank DOM (`<body>` with no content), or exposed production credentials.
-- **Safe Sandboxing**: Copies source trees defensively, respecting symlink boundaries and preventing directory traversal.
-- **Redacted Outputs**: All secrets, AWS keys, tokens, and credentials are automatically masked before appearing in terminal, JSON, HTML, or AI markdown reports.
-
----
-
-## 🤖 AI Agent Handoff
-
-When blockers are found, ReleaseProof automatically writes a structured AI remediation prompt to:
+ReleaseProof is continuously validated against a corpus of 42 benchmark fixtures and 10 real-world open source repositories:
 
 ```
-.releaseproof/RELEASEPROOF_FIX.md
-```
-
-You can feed this prompt directly back to Claude Code, Cursor, Copilot, or Devin:
-
-```bash
-# Feed directly to an agent
-cat .releaseproof/RELEASEPROOF_FIX.md | claude
-```
-
-The handoff file contains exact file paths, line numbers, stderr snippets, reproduction commands, and required fix steps.
-
----
-
-## 📊 Offline HTML Report
-
-After verification, ReleaseProof compiles a standalone, zero-dependency HTML dashboard at `.releaseproof/report.html`:
-
-- 🎨 **Visual Health Scores & Category Breakdown**
-- 📸 **Automatic Failure Screenshots** (captured via Playwright on crashed routes)
-- 📋 **One-Click "Copy AI Fix Prompt"** button
-- 🔒 **Zero-leak Sanitization**: Safe JSON serialization preventing XSS and secret exposure
-
-Open the report with:
-
-```bash
-npx releaseproof report
+═══════════════════════════════════════════════════════════
+               RELEASEPROOF BENCHMARK SUITE                
+═══════════════════════════════════════════════════════════
+  Total Fixtures:        42
+  True Positives (TP):   13
+  True Negatives (TN):   29
+  False Positives (FP):  0  (TARGET MET: ZERO FALSE BLOCKERS)
+  False Negatives (FN):  0
+  Blocker Precision:     100.0%
+  Blocker Recall:        100.0%
+  External Dependencies: 6  (Correctly marked INCOMPLETE)
+  Known False Blockers:  0
+═══════════════════════════════════════════════════════════
 ```
 
 ---
 
-## ⚙️ Configuration (`.releaseproof.json`)
+## 9. Security & Hardening
 
-Optional configuration file in your project root:
-
-```json
-{
-  "$schema": "https://raw.githubusercontent.com/releaseproof/releaseproof/main/packages/schemas/config.schema.json",
-  "ignoreDirs": ["tests", "fixtures", "legacy"],
-  "build": {
-    "command": "npm run build",
-    "timeoutMs": 120000
-  },
-  "start": {
-    "command": "npm run start",
-    "port": 3000,
-    "timeoutMs": 30000,
-    "healthCheckPath": "/api/health"
-  },
-  "browser": {
-    "enabled": true,
-    "headless": true,
-    "maxPages": 15,
-    "maxDepth": 3
-  },
-  "checks": {
-    "install": true,
-    "build": true,
-    "startup": true,
-    "browser": true,
-    "secrets": true,
-    "environment": true,
-    "documentation": true,
-    "devProd": true
-  }
-}
-```
+- **Clean-Room Isolation**: All commands execute in an isolated sandbox directory (`.temp/rp-sandbox-*`).
+- **Secret Redaction**: 12 credential formats (`sk_live_*`, `ghp_*`, AWS keys, JWTs) are scrubbed before writing reports.
+- **Process Tree Cleanup**: Background servers are killed using process tree signals (`taskkill /T /F` on Windows, process group SIGTERM/SIGKILL on POSIX).
+- **XSS Sanitization**: HTML reports serialize JSON payloads through `serializeSafeJson`, neutralizing `</script>` injection attacks.
+- **Zero Telemetry**: ReleaseProof sends zero telemetry or analytics. All computation is 100% local.
 
 ---
 
-## 🛠️ Monorepo Development
+## 10. Limitations (v0.1.0)
 
-To contribute or develop ReleaseProof locally:
-
-```bash
-# Clone the repository
-git clone https://github.com/releaseproof/releaseproof.git
-cd releaseproof
-
-# Install all dependencies
-pnpm install
-
-# Build all packages
-pnpm run build
-
-# Run unit tests
-pnpm run test
-
-# Run full 31-fixture benchmark suite
-pnpm run bench
-
-# Verify ReleaseProof using ReleaseProof
-pnpm run proof
-```
+- **External Databases**: Applications that hard-crash on startup if PostgreSQL or MongoDB is unreachable are classified as `VERIFICATION INCOMPLETE`. Containerized ephemeral test databases are planned for v0.2.
+- **Monorepos without Top-Level Scripts**: Monorepos requiring subpackages to be built in manual order without a root build script will fail build verification.
+- **Headless Browser Binaries**: Visual screenshot capture requires Playwright browser binaries (`npx playwright install`). When absent, ReleaseProof falls back automatically to its native HTTP crawler.
 
 ---
 
-## 🤝 Contributing
+## 11. Roadmap
 
-We welcome contributions! Please review [CONTRIBUTING.md](CONTRIBUTING.md) and our [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+- **v0.1.0 (Current)**: Local clean-room sandbox, 5 web stacks, zero false blockers, AI handoff markdown, HTML reports.
+- **v0.2.0**: Ephemeral Docker service sidecars (PostgreSQL, Redis, MongoDB), Model Context Protocol (MCP) server integration.
+- **v0.3.0**: Synthetic authenticated test sessions, automatic mock API response generators.
 
 ---
 
-## 📜 License
+## 12. License
 
-Apache License 2.0. See [LICENSE](LICENSE) for details.
+ReleaseProof is licensed under the [Apache-2.0 License](LICENSE).

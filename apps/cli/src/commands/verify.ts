@@ -23,9 +23,11 @@ export async function handleVerify(
 ): Promise<void> {
   const projectDir = path.resolve(targetPath);
 
+  const displayTarget = targetPath === '.' ? '.' : (path.relative(process.cwd(), projectDir) || '.');
+
   if (!options.json) {
     console.log(pc.bold('ReleaseProof'));
-    console.log(pc.dim(`Verifying production readiness for: ${projectDir}`));
+    console.log(pc.dim(`Verifying production readiness: ${displayTarget}`));
     console.log('');
   }
 
@@ -61,13 +63,15 @@ export async function handleVerify(
     // Write HTML report
     if (report.htmlReportPath) {
       const html = generateHtmlReport(report);
-      await fs.writeFile(report.htmlReportPath, html, 'utf-8');
+      const absHtml = path.resolve(process.cwd(), report.htmlReportPath);
+      await fs.writeFile(absHtml, html, 'utf-8');
     }
 
     // Write AI Fix Prompt
     if (report.fixPromptPath) {
       const prompt = generateAiHandoffMarkdown(report);
-      await fs.writeFile(report.fixPromptPath, prompt, 'utf-8');
+      const absFix = path.resolve(process.cwd(), report.fixPromptPath);
+      await fs.writeFile(absFix, prompt, 'utf-8');
     }
 
     if (options.json) {

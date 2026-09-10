@@ -2,13 +2,19 @@ import { VerificationReport } from '@releaseproof/schemas';
 
 export function generateAiHandoffMarkdown(report: VerificationReport): string {
   const issues = report.checks.filter(
-    (c) => c.status === 'block' || c.severity === 'blocker' || c.status === 'warn'
+    (c) => c.status === 'block' || c.severity === 'blocker' || c.status === 'warn' || c.status === 'unknown'
   );
 
   const lines: string[] = [];
   lines.push('# ReleaseProof Fix Task');
   lines.push('');
-  lines.push('The application failed production-readiness verification.');
+  if (report.verdict === 'INCOMPLETE') {
+    lines.push('Verification is incomplete because the application requires external infrastructure (database, cache, or SaaS credentials) that was not available in this test environment.');
+  } else if (report.verdict === 'READY') {
+    lines.push('The application passed production-readiness verification.');
+  } else {
+    lines.push('The application failed production-readiness verification.');
+  }
   lines.push('');
   lines.push('Your job is to fix ONLY the verified issues below.');
   lines.push('Do not rewrite unrelated architecture or refactor working code.');
@@ -21,7 +27,7 @@ export function generateAiHandoffMarkdown(report: VerificationReport): string {
   lines.push('');
   lines.push(`**Status**: ${report.verdict}`);
   lines.push(`**Score**: ${report.score} / 100`);
-  lines.push(`**Issues Found**: ${issues.length} (${report.counts.blockers} blockers, ${report.counts.warnings} warnings)`);
+  lines.push(`**Findings**: ${issues.length} (${report.counts.blockers} blockers, ${report.counts.warnings} warnings, ${report.counts.unknown || 0} external dependencies)`);
   lines.push('');
 
   if (issues.length === 0) {
@@ -32,10 +38,11 @@ export function generateAiHandoffMarkdown(report: VerificationReport): string {
   issues.forEach((issue, index) => {
     lines.push(`## Issue ${index + 1}: ${issue.title}`);
     lines.push('');
-    lines.push(`**Severity**: ${issue.severity.toUpperCase()}`);
+    const statusTag = issue.status === 'unknown' ? 'EXTERNAL_DEPENDENCY (UNVERIFIED)' : issue.severity.toUpperCase();
+    lines.push(`**Severity**: ${statusTag}`);
     lines.push(`**Category**: ${issue.category}`);
     lines.push('');
-    lines.push('### Problem');
+    lines.push(issue.status === 'unknown' ? '### Requirement' : '### Problem');
     lines.push(issue.summary);
     lines.push('');
 
