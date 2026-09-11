@@ -1,0 +1,1 @@
+{"name":"env-blocked-postgres","dependencies":{"express":"^4.19.2","pg":"^8.11.0"},"scripts":{"start":"node -e \"console.error('ConnectionRefusedError: connect ECONNREFUSED 127.0.0.1:5432'); process.exit(1)\""}}

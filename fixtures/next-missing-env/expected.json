@@ -1,0 +1,5 @@
+{
+  "expectedVerdict": "READY",
+  "expectedWarningCategory": "environment",
+  "minWarnings": 1
+}

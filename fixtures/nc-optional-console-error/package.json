@@ -1,0 +1,1 @@
+{"name":"nc-optional-console-error","scripts":{"start":"node -e \"const http=require('http'); http.createServer((q,r)=>{ r.writeHead(200,{'Content-Type':'text/html'}); r.end('<html><body><script>console.error(\\'Warning: Analytics script delayed loading\\');</script><h1>Dashboard</h1></body></html>'); }).listen(3000);\""}}

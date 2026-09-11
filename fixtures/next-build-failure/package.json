@@ -1,0 +1,1 @@
+{"name":"next-build-failure","dependencies":{"next":"14.2.0"},"scripts":{"build":"node -e \"console.error('Type error: Property x does not exist'); process.exit(1)\""}}

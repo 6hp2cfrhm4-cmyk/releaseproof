@@ -1,0 +1,1 @@
+{"name":"vite-console-error","dependencies":{"vite":"6.0.0"},"scripts":{"build":"node -e \"process.exit(0)\"","preview":"node -e \"const http=require('http'); http.createServer((q,r)=>{ r.writeHead(200,{'Content-Type':'text/html'}); r.end('<html><body><script>console.error(\\'Warning: Failed prop type in Button\\');</script><h1>Vite</h1></body></html>'); }).listen(5173);\""}}

@@ -1,0 +1,1 @@
+{"name":"express-production-crash","dependencies":{"express":"4.21.0"},"scripts":{"start":"node -e \"console.error('Error: DATABASE_URL not set'); process.exit(1)\""}}

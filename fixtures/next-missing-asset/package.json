@@ -1,0 +1,1 @@
+{"name":"next-missing-asset","dependencies":{"next":"14.2.0"},"scripts":{"build":"node -e \"process.exit(0)\"","start":"node -e \"const http=require('http'); http.createServer((q,r)=>{ if(q.url==='/logo.png'){ r.writeHead(404); r.end(); } else { r.writeHead(200,{'Content-Type':'text/html'}); r.end('<img src=\\'/logo.png\\' />'); } }).listen(3000);\""}}

@@ -1,0 +1,1 @@
+const http = require("node:http"); console.log("pure node runtime, zero devdep imports");

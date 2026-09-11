@@ -1,0 +1,1 @@
+{"name":"nc-api-400-invalid-input","scripts":{"start":"node -e \"const http=require('http'); http.createServer((q,r)=>{ if(q.url==='/api/item'){ r.writeHead(400,{'Content-Type':'application/json'}); r.end(JSON.stringify({error:'Missing id'})); } else { r.writeHead(200,{'Content-Type':'text/html'}); r.end('<a href=\\'/api/item\\'>API Call</a>'); } }).listen(3000);\""}}

@@ -1,0 +1,1 @@
+{"name":"nc-legitimate-404","scripts":{"start":"node -e \"const http=require('http'); http.createServer((q,r)=>{ if(q.url==='/legacy'){ r.writeHead(404); r.end('Page removed'); } else { r.writeHead(200,{'Content-Type':'text/html'}); r.end('<a href=\\'/legacy\\'>Old Link</a>'); } }).listen(3000);\""}}

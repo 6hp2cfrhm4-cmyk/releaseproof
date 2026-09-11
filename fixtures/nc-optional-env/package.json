@@ -1,0 +1,1 @@
+{"name":"nc-optional-env","scripts":{"start":"node -e \"const http=require('http'); http.createServer((q,r)=>r.end('ok')).listen(3000);\""}}

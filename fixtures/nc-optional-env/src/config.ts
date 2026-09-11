@@ -1,0 +1,1 @@
+export const analyticsId = process.env.OPTIONAL_ANALYTICS_ID || "default-id";

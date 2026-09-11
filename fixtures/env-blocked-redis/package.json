@@ -1,0 +1,1 @@
+{"name":"env-blocked-redis","dependencies":{"express":"^4.19.2","ioredis":"^5.3.0"},"scripts":{"start":"node -e \"console.error('Error: Redis connection to 127.0.0.1:6379 failed - connect ECONNREFUSED 127.0.0.1:6379'); process.exit(1)\""}}

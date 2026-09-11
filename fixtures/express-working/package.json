@@ -1,0 +1,1 @@
+{"name":"express-working","dependencies":{"express":"4.21.0"},"scripts":{"start":"node -e \"const http=require('http'); http.createServer((q,r)=>{ r.writeHead(200,{'Content-Type':'application/json'}); r.end(JSON.stringify({status:'ok'})); }).listen(3000);\""}}

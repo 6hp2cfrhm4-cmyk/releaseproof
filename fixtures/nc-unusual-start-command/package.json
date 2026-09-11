@@ -1,0 +1,1 @@
+{"name":"nc-unusual-start-command","scripts":{"start":"node --no-warnings -e \"const http=require('http'); http.createServer((q,r)=>r.end('ok')).listen(3000);\""}}

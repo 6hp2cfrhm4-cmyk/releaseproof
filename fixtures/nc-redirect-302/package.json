@@ -1,0 +1,1 @@
+{"name":"nc-redirect-302","scripts":{"start":"node -e \"const http=require('http'); http.createServer((q,r)=>{ if(q.url==='/old-url'){ r.writeHead(302, { Location: '/' }); r.end(); } else { r.writeHead(200,{'Content-Type':'text/html'}); r.end('<h1>Redirected Home</h1><a href=\\'/old-url\\'>Old Link</a>'); } }).listen(3000);\""}}

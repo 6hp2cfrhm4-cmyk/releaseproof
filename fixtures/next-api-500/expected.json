@@ -1,0 +1,5 @@
+{
+  "expectedVerdict": "NOT_READY",
+  "expectedBlockerCategory": "browser",
+  "minBlockers": 1
+}

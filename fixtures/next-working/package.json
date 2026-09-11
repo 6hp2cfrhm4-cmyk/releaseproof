@@ -1,0 +1,1 @@
+{"name":"next-working","dependencies":{"next":"^14.2.0","react":"^18.3.1","react-dom":"^18.3.1"},"scripts":{"build":"node -e \"process.exit(0)\"","start":"node -e \"const http=require('http'); http.createServer((q,r)=>{ r.writeHead(200,{'Content-Type':'text/html'}); r.end('<h1>Next Home</h1>'); }).listen(3000);\""}}

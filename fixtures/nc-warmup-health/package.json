@@ -1,0 +1,1 @@
+{"name":"nc-warmup-health","scripts":{"start":"node -e \"const http=require('http'); http.createServer((q,r)=>{ r.writeHead(200); r.end('healthy'); }).listen(3000);\""}}

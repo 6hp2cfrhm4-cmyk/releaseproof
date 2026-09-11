@@ -1,0 +1,1 @@
+{"name":"nc-delayed-startup","scripts":{"start":"node -e \"setTimeout(()=>{ const http=require('http'); http.createServer((q,r)=>r.end('ready')).listen(3000); }, 1200);\""}}

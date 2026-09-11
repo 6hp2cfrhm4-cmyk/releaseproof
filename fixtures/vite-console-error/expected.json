@@ -1,0 +1,5 @@
+{
+  "expectedVerdict": "READY",
+  "expectedWarningCategory": "browser",
+  "minWarnings": 1
+}

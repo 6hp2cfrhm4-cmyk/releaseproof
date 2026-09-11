@@ -1,0 +1,1 @@
+{"name":"env-blocked-optional-stripe","dependencies":{"stripe":"^14.0.0","express":"^4.19.2"},"scripts":{"start":"node -e \"console.error('StripeInitializationError: No API key provided. Set STRIPE_SECRET_KEY in environment'); process.exit(1)\""}}

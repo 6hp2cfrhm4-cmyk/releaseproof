@@ -1,0 +1,1 @@
+export default () => <a href="/api/users">API</a>;

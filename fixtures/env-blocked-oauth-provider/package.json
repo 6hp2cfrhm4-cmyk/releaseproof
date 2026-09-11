@@ -1,0 +1,1 @@
+{"name":"env-blocked-oauth-provider","dependencies":{"next-auth":"^4.24.0","next":"14.2.0"},"scripts":{"build":"node -e \"process.exit(0)\"","start":"node -e \"console.error('[next-auth][error][NO_SECRET]: Missing NEXTAUTH_SECRET. In production, this environment variable is required.'); process.exit(1)\""}}

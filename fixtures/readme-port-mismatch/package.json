@@ -1,0 +1,1 @@
+{"name":"readme-port-mismatch","scripts":{"start":"node -e \"const http=require('http'); http.createServer((q,r)=>r.end('ok')).listen(8080);\""}}

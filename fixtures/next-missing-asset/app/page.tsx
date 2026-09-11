@@ -1,0 +1,1 @@
+export default () => <div><img src="/logo.png" /></div>;

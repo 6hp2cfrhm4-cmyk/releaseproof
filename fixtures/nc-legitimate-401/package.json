@@ -1,0 +1,1 @@
+{"name":"nc-legitimate-401","scripts":{"start":"node -e \"const http=require('http'); http.createServer((q,r)=>{ if(q.url==='/admin'){ r.writeHead(401,{'Content-Type':'text/plain'}); r.end('Unauthorized'); } else { r.writeHead(200,{'Content-Type':'text/html'}); r.end('<a href=\\'/admin\\'>Admin Login</a>'); } }).listen(3000);\""}}

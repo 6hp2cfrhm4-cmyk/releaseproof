@@ -1,0 +1,1 @@
+{"name":"hanging-start-command","scripts":{"start":"node -e \"setInterval(()=>{}, 10000);\""}}

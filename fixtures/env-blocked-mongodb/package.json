@@ -1,0 +1,1 @@
+{"name":"env-blocked-mongodb","dependencies":{"express":"^4.19.2","mongoose":"^8.0.0"},"scripts":{"start":"node -e \"console.error('MongooseServerSelectionError: connect ECONNREFUSED 127.0.0.1:27017'); process.exit(1)\""}}

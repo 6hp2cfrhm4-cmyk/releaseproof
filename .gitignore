@@ -12,8 +12,8 @@ build/
 .cache/
 .turbo/
 .temp/
+.next/
 .releaseproof/
-fixtures/
 coverage/
 *.log
 npm-debug.log*

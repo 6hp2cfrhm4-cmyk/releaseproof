@@ -1,0 +1,1 @@
+{"name":"vite-missing-dependency","dependencies":{"vite":"6.0.0"},"scripts":{"build":"node -e \"console.error('Error: Cannot find module lodash-es'); process.exit(1)\""}}

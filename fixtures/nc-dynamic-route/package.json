@@ -1,0 +1,1 @@
+{"name":"nc-dynamic-route","scripts":{"start":"node -e \"const http=require('http'); http.createServer((q,r)=>{ r.writeHead(200,{'Content-Type':'text/html'}); r.end('<a href=\\'/users/123\\'>Profile</a>'); }).listen(3000);\""}}

@@ -1,0 +1,5 @@
+{
+  "expectedVerdict": "NOT_READY",
+  "expectedBlockerCategory": "build",
+  "minBlockers": 1
+}

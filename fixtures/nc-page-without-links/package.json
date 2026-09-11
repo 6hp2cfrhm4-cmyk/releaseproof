@@ -1,0 +1,1 @@
+{"name":"nc-page-without-links","scripts":{"start":"node -e \"const http=require('http'); http.createServer((q,r)=>{ r.writeHead(200,{'Content-Type':'text/html'}); r.end('<html><body><h1>Single Page View</h1><p>Welcome to our solitary view without outbound links.</p></body></html>'); }).listen(3000);\""}}

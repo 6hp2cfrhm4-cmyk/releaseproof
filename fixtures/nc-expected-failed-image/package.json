@@ -1,0 +1,1 @@
+{"name":"nc-expected-failed-image","scripts":{"start":"node -e \"const http=require('http'); http.createServer((q,r)=>{ if(q.url==='/favicon.ico'){ r.writeHead(404); r.end(); } else { r.writeHead(200,{'Content-Type':'text/html'}); r.end('<h1>With Favicon</h1><link rel=\\'icon\\' href=\\'/favicon.ico\\'>'); } }).listen(3000);\""}}

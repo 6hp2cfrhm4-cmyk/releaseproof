@@ -1,0 +1,1 @@
+app.get("/users/:id", (req, res) => res.send("user"));

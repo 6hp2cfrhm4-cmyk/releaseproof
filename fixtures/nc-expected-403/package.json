@@ -1,0 +1,1 @@
+{"name":"nc-expected-403","scripts":{"start":"node -e \"const http=require('http'); http.createServer((q,r)=>{ if(q.url==='/forbidden'){ r.writeHead(403,{'Content-Type':'text/plain'}); r.end('Forbidden'); } else { r.writeHead(200,{'Content-Type':'text/html'}); r.end('<a href=\\'/forbidden\\'>Protected</a>'); } }).listen(3000);\""}}

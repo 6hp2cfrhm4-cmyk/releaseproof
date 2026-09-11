@@ -1,0 +1,1 @@
+{"name":"next-api-500","dependencies":{"next":"14.2.0"},"scripts":{"build":"node -e \"process.exit(0)\"","start":"node -e \"const http=require('http'); http.createServer((q,r)=>{ if(q.url==='/api/users'){ r.writeHead(500); r.end('DB Crash'); } else { r.writeHead(200,{'Content-Type':'text/html'}); r.end('<a href=\\'/api/users\\'>API</a>'); } }).listen(3000);\""}}

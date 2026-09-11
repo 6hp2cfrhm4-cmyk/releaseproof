@@ -1,0 +1,1 @@
+{"name":"next-runtime-crash","dependencies":{"next":"14.2.0"},"scripts":{"build":"node -e \"process.exit(0)\"","start":"node -e \"console.error('Fatal Error: Cannot connect to Redis cluster'); process.exit(1)\""}}
