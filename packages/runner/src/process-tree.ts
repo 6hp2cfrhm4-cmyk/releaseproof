@@ -17,17 +17,21 @@ export async function killProcessTree(pid: number): Promise<void> {
       // Process might have already exited
     }
   } else {
+    // 1. Try killing all spawned child processes via pkill
     try {
-      // Try killing the process group first
-      process.kill(-pid, 'SIGTERM');
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      execFileSync('pkill', ['-KILL', '-P', String(pid)], { stdio: 'ignore' });
+    } catch {}
+
+    // 2. Try killing the process group (works if spawned with detached: true)
+    try {
       process.kill(-pid, 'SIGKILL');
+    } catch {}
+
+    // 3. Try killing the process itself
+    try {
+      process.kill(pid, 'SIGKILL');
     } catch {
-      try {
-        process.kill(pid, 'SIGKILL');
-      } catch {
-        // Already gone
-      }
+      // Already gone
     }
   }
 }

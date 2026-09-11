@@ -150,8 +150,17 @@ export async function runBenchmark(): Promise<void> {
     console.log(pc.bold(pc.green(`\nPASSED: Known False Blockers: 0! Precision: ${precision}%, Recall: ${recall}%.`)));
     process.exitCode = 0;
   }
+
+  process.exit(process.exitCode ?? 0);
 }
 
 if (process.argv[1] && process.argv[1].endsWith('run-bench.ts')) {
-  runBenchmark().catch(console.error);
+  runBenchmark()
+    .then(() => {
+      process.exit(process.exitCode ?? 0);
+    })
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
 }

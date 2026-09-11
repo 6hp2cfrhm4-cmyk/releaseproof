@@ -34,11 +34,15 @@ function spawnSecure(command: string, options: CommandOptions): ChildProcess {
     FORCE_COLOR: '0',
   };
 
+  const isWindows = process.platform === 'win32';
+  const detached = !isWindows;
+
   if (options.shell !== undefined) {
     return spawn(command, {
       cwd: options.cwd || process.cwd(),
       env: mergedEnv,
       shell: options.shell,
+      detached,
       windowsHide: true,
     });
   }
@@ -47,11 +51,12 @@ function spawnSecure(command: string, options: CommandOptions): ChildProcess {
 
   // If command uses pipes, redirection, or chaining, use explicit shell
   if (hasShellOperators) {
-    const shell = process.platform === 'win32' ? true : '/bin/sh';
+    const shell = isWindows ? true : '/bin/sh';
     return spawn(command, {
       cwd: options.cwd || process.cwd(),
       env: mergedEnv,
       shell,
+      detached,
       windowsHide: true,
     });
   }
@@ -62,6 +67,7 @@ function spawnSecure(command: string, options: CommandOptions): ChildProcess {
     cwd: options.cwd || process.cwd(),
     env: mergedEnv,
     shell: needsShell,
+    detached,
     windowsHide: true,
   });
 }
@@ -283,6 +289,11 @@ export function spawnService(
   });
 
   child.on('exit', () => {
+    exited = true;
+  });
+
+  child.on('error', (err) => {
+    stderr += `\nProcess error: ${err.message}`;
     exited = true;
   });
 

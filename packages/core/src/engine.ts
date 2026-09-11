@@ -11,6 +11,7 @@ import { createCleanWorkspace } from '@releaseproof/sandbox';
 import { analyzeEnvironment } from '@releaseproof/environment';
 import { scanForSecrets, redactObject } from '@releaseproof/security';
 import { verifyBrowserApp } from '@releaseproof/browser';
+import { killPortProcess } from '@releaseproof/runner';
 
 import { runInstallCheck } from './checks/install.js';
 import { runBuildCheck } from './checks/build.js';
@@ -190,14 +191,33 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
       allChecks.push(...readmeChecks);
       progress('Checking README as contract', 'done');
     }
-  } catch (err) {
-    // Pipeline caught expected failure step and logged evidence
+  } catch (err: unknown) {
+    const isExpectedShortCircuit =
+      err instanceof Error &&
+      (err.message.includes('failed in clean environment') || err.message.includes('build failed'));
+
+    if (!isExpectedShortCircuit) {
+      allChecks.push({
+        id: 'engine-unexpected-error',
+        title: 'Verification engine pipeline error',
+        category: 'runtime',
+        status: 'block',
+        severity: 'blocker',
+        summary: `Pipeline encountered an unexpected runtime failure: ${err instanceof Error ? err.message : String(err)}`,
+        evidence: [],
+      });
+    }
   } finally {
     process.off('SIGINT', onSignal);
     process.off('SIGTERM', onSignal);
     if (runningService) {
       try {
         await runningService.kill();
+      } catch {}
+    }
+    if (activePort) {
+      try {
+        await killPortProcess(activePort);
       } catch {}
     }
     await workspace.dispose();

@@ -1,5 +1,12 @@
 import { CheckResult, ProcessEvidence, HttpEvidence } from '@releaseproof/schemas';
-import { spawnService, RunningService, checkHealthEndpoint } from '@releaseproof/runner';
+import {
+  spawnService,
+  RunningService,
+  checkHealthEndpoint,
+  killPortProcess,
+  isPortListening,
+  waitForPortClose,
+} from '@releaseproof/runner';
 import { detectExternalServiceDependency } from './external-services.js';
 
 export interface StartupCheckResult {
@@ -29,6 +36,12 @@ export async function runStartupCheck(
     };
   }
 
+  // Ensure port is clear before spawning service to avoid false positives
+  if (await isPortListening(port, '127.0.0.1', 200)) {
+    await killPortProcess(port);
+    await waitForPortClose(port, '127.0.0.1', 1000);
+  }
+
   const service = spawnService(startCommand, {
     cwd: workspaceDir,
     env: { PORT: String(port) },
@@ -40,6 +53,7 @@ export async function runStartupCheck(
     const logs = service.getLogs();
     const alive = service.isAlive();
     await service.kill();
+    await killPortProcess(port);
 
     const evidence: ProcessEvidence = {
       type: 'process',
