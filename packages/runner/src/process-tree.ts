@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
  * On POSIX systems, sends SIGKILL to the process group or process.
  */
 export async function killProcessTree(pid: number): Promise<void> {
-  if (!pid || pid <= 0) return;
+  if (!pid || pid <= 0 || pid === process.pid) return;
 
   const isWindows = process.platform === 'win32';
 

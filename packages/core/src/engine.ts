@@ -11,7 +11,6 @@ import { createCleanWorkspace } from '@releaseproof/sandbox';
 import { analyzeEnvironment } from '@releaseproof/environment';
 import { scanForSecrets, redactObject } from '@releaseproof/security';
 import { verifyBrowserApp } from '@releaseproof/browser';
-import { killPortProcess } from '@releaseproof/runner';
 
 import { runInstallCheck } from './checks/install.js';
 import { runBuildCheck } from './checks/build.js';
@@ -213,11 +212,6 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     if (runningService) {
       try {
         await runningService.kill();
-      } catch {}
-    }
-    if (activePort) {
-      try {
-        await killPortProcess(activePort);
       } catch {}
     }
     await workspace.dispose();

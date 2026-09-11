@@ -156,38 +156,6 @@ export function checkHealthEndpoint(
   });
 }
 
-/**
- * Forcefully frees a port if a lingering process is holding it.
- */
-export async function killPortProcess(port: number): Promise<void> {
-  if (!port || port <= 0) return;
-
-  if (process.platform === 'win32') {
-    try {
-      const { execSync } = await import('node:child_process');
-      const out = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
-      for (const line of out.split('\n')) {
-        const parts = line.trim().split(/\s+/);
-        if (parts.length >= 5 && parts[1].endsWith(`:${port}`) && parts[3] === 'LISTENING') {
-          const pid = parts[4];
-          if (pid && pid !== '0' && pid !== String(process.pid)) {
-            try {
-              execSync(`taskkill /pid ${pid} /F /T`, { stdio: 'ignore' });
-            } catch {}
-          }
-        }
-      }
-    } catch {}
-  } else {
-    try {
-      const { execSync } = await import('node:child_process');
-      execSync(`fuser -k -9 ${port}/tcp 2>/dev/null || lsof -ti:${port} | xargs -r kill -9 2>/dev/null || true`, {
-        shell: '/bin/sh',
-        stdio: 'ignore',
-      });
-    } catch {}
-  }
-}
 
 /**
  * Waits until a port is no longer accepting connections.

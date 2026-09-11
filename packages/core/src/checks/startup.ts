@@ -3,7 +3,6 @@ import {
   spawnService,
   RunningService,
   checkHealthEndpoint,
-  killPortProcess,
   isPortListening,
   waitForPortClose,
 } from '@releaseproof/runner';
@@ -36,9 +35,8 @@ export async function runStartupCheck(
     };
   }
 
-  // Ensure port is clear before spawning service to avoid false positives
+  // Ensure port is not lingering in CLOSE_WAIT before spawning
   if (await isPortListening(port, '127.0.0.1', 200)) {
-    await killPortProcess(port);
     await waitForPortClose(port, '127.0.0.1', 1000);
   }
 
@@ -53,7 +51,6 @@ export async function runStartupCheck(
     const logs = service.getLogs();
     const alive = service.isAlive();
     await service.kill();
-    await killPortProcess(port);
 
     const evidence: ProcessEvidence = {
       type: 'process',
