@@ -43,7 +43,8 @@
   "scripts": {
     "build": "tsc && esbuild src/index.ts --bundle --platform=node --format=esm \"--banner:js=import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);\" --outfile=dist/index.js --external:playwright",
     "dev": "tsx src/index.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm -w run build"
   },
   "dependencies": {},
   "optionalDependencies": {

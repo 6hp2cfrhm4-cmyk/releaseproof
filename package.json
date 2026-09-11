@@ -13,7 +13,8 @@
     "bench": "pnpm --filter benchmarks run bench",
     "dev": "pnpm --filter releaseproof run dev",
     "cli": "pnpm --filter releaseproof run dev",
-    "proof": "node ./apps/cli/dist/index.js verify"
+    "proof": "node ./apps/cli/dist/index.js verify",
+    "release": "pnpm publish --filter releaseproof --access public"
   },
   "devDependencies": {
     "@types/node": "^22.13.1",
