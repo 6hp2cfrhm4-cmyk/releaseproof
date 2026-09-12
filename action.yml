@@ -52,7 +52,8 @@ runs:
         
         echo "Running ReleaseProof on ${{ inputs.path }}..."
         EXIT_CODE=0
-        npx releaseproof verify "${{ inputs.path }}" $ARGS || EXIT_CODE=$?
+        RELEASE_TARBALL="https://github.com/6hp2cfrhm4-cmyk/releaseproof/releases/download/v0.1.0/releaseproof-0.1.0.tgz"
+        npx --yes "$RELEASE_TARBALL" verify "${{ inputs.path }}" $ARGS || EXIT_CODE=$?
 
         REPORT_JSON="${{ inputs.path }}/.releaseproof/report.json"
         if [ -f "$REPORT_JSON" ] && [ -n "$GITHUB_STEP_SUMMARY" ]; then

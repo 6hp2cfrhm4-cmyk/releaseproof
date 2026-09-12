@@ -1,7 +1,7 @@
 # ReleaseProof
 
 [![CI](https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/workflows/ci.yml/badge.svg)](https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/releaseproof.svg)](https://www.npmjs.com/package/releaseproof)
+[![GitHub Release](https://img.shields.io/github/v/release/6hp2cfrhm4-cmyk/releaseproof?label=release&color=blue)](https://github.com/6hp2cfrhm4-cmyk/releaseproof/releases/tag/v0.1.0)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Your AI says it's done.  
@@ -10,7 +10,8 @@ ReleaseProof checks if it actually ships.
 **Vibe code. Verify before you ship.**
 
 ```bash
-npx releaseproof
+# Run directly from official GitHub Release (no npm registry install needed)
+npx https://github.com/6hp2cfrhm4-cmyk/releaseproof/releases/download/v0.1.0/releaseproof-0.1.0.tgz
 ```
 
 ```
@@ -67,33 +68,81 @@ ReleaseProof:
 
 ---
 
-## 2. Quick Start
+## 2. Installation & Quick Start
 
-Run ReleaseProof in any repository with zero configuration:
+ReleaseProof v0.1.0 is distributed primarily through **GitHub Releases** and source builds.
+
+### Method 1: Install Globally from GitHub Release (Recommended)
+
+Install the prebuilt CLI package directly from the verified GitHub Release asset:
 
 ```bash
-# Run full clean-room verification pipeline on current directory
-npx releaseproof
+npm install -g https://github.com/6hp2cfrhm4-cmyk/releaseproof/releases/download/v0.1.0/releaseproof-0.1.0.tgz
+```
+
+Then run `releaseproof` in any repository:
+
+```bash
+# Run full clean-room verification pipeline on the current directory
+releaseproof
 
 # Run verification on a specific project directory
-npx releaseproof verify ./path/to/project
+releaseproof verify ./path/to/project
 
 # View the interactive HTML report in your browser
-npx releaseproof report
+releaseproof report
 
 # Generate a shareable terminal card
-npx releaseproof vibe
+releaseproof vibe
 
-# Check your environment prerequisites (Node, Python, Docker)
-npx releaseproof doctor
+# Check your environment prerequisites (Node, Python, Playwright)
+releaseproof doctor
 ```
 
-Or install globally:
+> **Zero-Install with `npx`**:
+> You can also run verification without installing globally:
+> ```bash
+> npx https://github.com/6hp2cfrhm4-cmyk/releaseproof/releases/download/v0.1.0/releaseproof-0.1.0.tgz verify ./path/to/project
+> ```
+
+---
+
+### Method 2: Clone & Build from Source
+
+Clone the repository and build the standalone CLI bundle:
 
 ```bash
-npm install -g releaseproof
-releaseproof verify
+# 1. Clone the repository
+git clone https://github.com/6hp2cfrhm4-cmyk/releaseproof.git
+cd releaseproof
+
+# 2. Install dependencies & build all packages
+pnpm install
+pnpm build
+
+# 3. Link globally so the 'releaseproof' binary is available system-wide
+npm link ./apps/cli
+
+# Run verification from anywhere:
+releaseproof verify /path/to/project
 ```
+
+*Alternatively, execute directly via Node without global linking:*
+```bash
+node apps/cli/dist/index.js verify /path/to/project
+# or via pnpm from repository root:
+pnpm proof /path/to/project
+```
+
+---
+
+### Distribution Channels
+
+| Channel | Status | Installation / Run Command |
+| :--- | :--- | :--- |
+| **GitHub Releases** | 🟢 **Primary / Available** | `npm i -g https://github.com/6hp2cfrhm4-cmyk/releaseproof/releases/download/v0.1.0/releaseproof-0.1.0.tgz` |
+| **Source Clone** | 🟢 **Available** | `git clone https://github.com/6hp2cfrhm4-cmyk/releaseproof.git && pnpm build` |
+| **npm Registry** | ⚪ *Planned Next Step* | Direct `npx releaseproof` will be enabled once public registry maintainer setup is finalized. |
 
 ---
 

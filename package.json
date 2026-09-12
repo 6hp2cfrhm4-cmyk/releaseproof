@@ -5,6 +5,9 @@
   "description": "Your AI says it's done. ReleaseProof checks if it actually ships.",
   "license": "Apache-2.0",
   "type": "module",
+  "bin": {
+    "releaseproof": "./apps/cli/dist/index.js"
+  },
   "scripts": {
     "build": "pnpm -r --filter=!benchmarks run build",
     "test": "vitest run",

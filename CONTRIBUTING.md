@@ -60,7 +60,7 @@ pnpm run proof
 - `packages/core`: Engine orchestrator, dev vs prod dependency verification, README-as-contract checker, scoring algorithm.
 - `packages/reporter`: Terminal reporting (`picocolors`), ASCII vibe card, AI handoff markdown, and self-contained HTML dashboard.
 - `apps/cli`: Commander-based CLI binary (`releaseproof`).
-- `benchmarks`: Automated 31-fixture benchmark harness for regression testing.
+- `benchmarks`: Automated 42-fixture benchmark harness for regression testing.
 - `examples/broken-vibe-app`: Signature demo project with realistic AI-generated production pitfalls.
 
 ---
@@ -69,7 +69,7 @@ pnpm run proof
 
 - **Unit tests**: Fast unit tests live in `__tests__/` inside each package. Run with `pnpm run test`.
 - **Benchmark tests**: Live in `benchmarks/`. Every change must maintain **0 False Blockers** on `pnpm run bench`.
-- **Clean bundle test**: The published CLI bundle in `apps/cli` must remain fully self-contained and run cleanly via `npx releaseproof`.
+- **Clean bundle test**: The CLI bundle in `apps/cli` must remain fully self-contained and run cleanly via `node apps/cli/dist/index.js` or via the packaged tarball.
 
 ---
 
