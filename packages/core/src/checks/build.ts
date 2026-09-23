@@ -4,7 +4,9 @@ import { detectExternalServiceDependency } from './external-services.js';
 
 export async function runBuildCheck(
   workspaceDir: string,
-  buildCommand?: string
+  buildCommand?: string,
+  environment: Record<string, string | undefined> = {},
+  allowHostEnv: string[] = []
 ): Promise<CheckResult> {
   if (!buildCommand) {
     return {
@@ -21,6 +23,8 @@ export async function runBuildCheck(
   const result = await execCommand(buildCommand, {
     cwd: workspaceDir,
     timeoutMs: 180000,
+    env: environment,
+    allowHostEnv,
   });
 
   const evidence: CommandEvidence = {
@@ -61,6 +65,7 @@ export async function runBuildCheck(
         requiresExternalService: true,
         service: extDep.name,
       },
+      classification: 'EXTERNAL_DEPENDENCY_UNAVAILABLE',
     };
   }
 
@@ -73,5 +78,6 @@ export async function runBuildCheck(
     summary: `Build failed with exit code ${result.exitCode}. Build errors prevent deployment.`,
     evidence: [evidence],
     remediation: 'Inspect compiler/bundler errors in build log and resolve compilation or type check errors.',
+    classification: 'APPLICATION_FAILURE',
   };
 }

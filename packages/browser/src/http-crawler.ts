@@ -49,7 +49,7 @@ function fetchPageHttp(targetUrl: string, timeoutMs: number): Promise<PageCrawlR
         path: parsed.pathname + parsed.search,
         method: 'GET',
         headers: {
-          'User-Agent': 'ReleaseProof-Crawler/0.1.0',
+          'User-Agent': 'ReleaseProof-Crawler/0.2.0-dev.0',
           Accept: 'text/html,application/xhtml+xml,application/json,*/*',
         },
         timeout: timeoutMs,
@@ -77,7 +77,7 @@ function fetchPageHttp(targetUrl: string, timeoutMs: number): Promise<PageCrawlR
           }
 
           // Check if body looks like error page
-          const isBlank = body.trim().length === 0;
+          const isBlank = status !== 204 && body.trim().length === 0;
           const isErrorBoundary = /Internal Server Error|Application Error|Unhandled Runtime Error/i.test(body);
 
           const domState = isBlank

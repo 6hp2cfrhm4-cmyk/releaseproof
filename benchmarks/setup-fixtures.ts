@@ -17,6 +17,22 @@ export interface FixtureDefinition {
   };
 }
 
+const GENERATED_FIXTURE_ENTRIES = [
+  '.releaseproof',
+  '.releaseproof-venv',
+  'node_modules',
+  '__pycache__',
+];
+
+export async function cleanupFixtureArtifacts(fixDir: string, keepPackageLock: boolean): Promise<void> {
+  for (const entry of GENERATED_FIXTURE_ENTRIES) {
+    await fs.rm(path.join(fixDir, entry), { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  }
+  if (!keepPackageLock) {
+    await fs.rm(path.join(fixDir, 'package-lock.json'), { force: true });
+  }
+}
+
 export const allFixtures: FixtureDefinition[] = [
   // 1. Next.js working
   {
@@ -652,6 +668,7 @@ export async function setupFixtures(): Promise<void> {
   for (const fixture of allFixtures) {
     const fixDir = path.join(fixturesRoot, fixture.name);
     await fs.mkdir(fixDir, { recursive: true });
+    await cleanupFixtureArtifacts(fixDir, Object.hasOwn(fixture.files, 'package-lock.json'));
 
     for (const [relPath, content] of Object.entries(fixture.files)) {
       const fullPath = path.join(fixDir, relPath);

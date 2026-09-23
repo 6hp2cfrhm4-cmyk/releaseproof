@@ -41,7 +41,7 @@ export function formatTerminalReport(report: VerificationReport): string {
   }
 
   const unknownCount = report.counts.unknown || 0;
-  const unknownText = unknownCount > 0 ? `${pc.cyan(String(unknownCount) + (unknownCount === 1 ? ' external dependency' : ' external dependencies'))} · ` : '';
+  const unknownText = unknownCount > 0 ? `${pc.cyan(String(unknownCount) + (unknownCount === 1 ? ' incomplete check' : ' incomplete checks'))} · ` : '';
 
   lines.push(
     pc.dim(
@@ -114,7 +114,7 @@ export function formatTerminalReport(report: VerificationReport): string {
   const unknowns = report.checks.filter((c) => c.status === 'unknown');
   if (unknowns.length > 0) {
     lines.push('');
-    lines.push(pc.bold(pc.cyan(`Requires External Infrastructure (${unknowns.length}):`)));
+    lines.push(pc.bold(pc.cyan(`Incomplete or Unavailable Verification (${unknowns.length}):`)));
     for (const u of unknowns) {
       lines.push(`  ? [${u.category}] ${pc.bold(u.title)}`);
       lines.push(`    ${pc.white(u.summary)}`);

@@ -9,7 +9,7 @@ export function generateAiHandoffMarkdown(report: VerificationReport): string {
   lines.push('# ReleaseProof Fix Task');
   lines.push('');
   if (report.verdict === 'INCOMPLETE') {
-    lines.push('Verification is incomplete because the application requires external infrastructure (database, cache, or SaaS credentials) that was not available in this test environment.');
+    lines.push('Verification is incomplete because one or more required capabilities, external dependencies, or verification steps were unavailable. Inspect each finding classification below.');
   } else if (report.verdict === 'READY') {
     lines.push('The application passed production-readiness verification.');
   } else {
@@ -22,7 +22,7 @@ export function generateAiHandoffMarkdown(report: VerificationReport): string {
   lines.push('After applying your changes, verify them by running:');
   lines.push('');
   lines.push('```bash');
-  lines.push('npx releaseproof verify');
+  lines.push('releaseproof verify');
   lines.push('```');
   lines.push('');
   lines.push(`**Status**: ${report.verdict}`);
@@ -38,7 +38,7 @@ export function generateAiHandoffMarkdown(report: VerificationReport): string {
   issues.forEach((issue, index) => {
     lines.push(`## Issue ${index + 1}: ${issue.title}`);
     lines.push('');
-    const statusTag = issue.status === 'unknown' ? 'EXTERNAL_DEPENDENCY (UNVERIFIED)' : issue.severity.toUpperCase();
+    const statusTag = issue.status === 'unknown' ? (issue.classification || 'VERIFICATION_UNAVAILABLE') : issue.severity.toUpperCase();
     lines.push(`**Severity**: ${statusTag}`);
     lines.push(`**Category**: ${issue.category}`);
     lines.push('');
@@ -96,7 +96,7 @@ export function generateAiHandoffMarkdown(report: VerificationReport): string {
       lines.push(`2. Execute \`${report.profile.commands.start || 'npm start'}\`.`);
       lines.push('3. Inspect output or navigate to failing route.');
     } else {
-      lines.push('2. Run `npx releaseproof verify`.');
+      lines.push('2. Run `releaseproof verify`.');
     }
     lines.push('');
 

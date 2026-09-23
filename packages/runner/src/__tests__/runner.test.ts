@@ -16,6 +16,24 @@ describe('runner', () => {
     expect(res.exitCode).toBe(42);
   });
 
+  it('does not inherit arbitrary host secrets unless explicitly allowed', async () => {
+    const key = 'RELEASEPROOF_TEST_SECRET';
+    const previous = process.env[key];
+    process.env[key] = 'synthetic-secret-value';
+    try {
+      const isolated = await execCommand(`node -e "console.log(process.env.${key} || 'absent')"`);
+      expect(isolated.stdout.trim()).toBe('absent');
+
+      const allowed = await execCommand(`node -e "console.log(process.env.${key} || 'absent')"`, {
+        allowHostEnv: [key],
+      });
+      expect(allowed.stdout.trim()).toBe('synthetic-secret-value');
+    } finally {
+      if (previous === undefined) delete process.env[key];
+      else process.env[key] = previous;
+    }
+  });
+
   it('handles command timeout properly', async () => {
     const res = await execCommand('node -e "setTimeout(() => {}, 10000)"', {
       timeoutMs: 500,

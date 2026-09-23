@@ -7,10 +7,11 @@ import {
   CheckResult,
 } from '@releaseproof/schemas';
 import { detectProject } from '@releaseproof/detector';
-import { createCleanWorkspace } from '@releaseproof/sandbox';
+import { createCleanWorkspace, DEFAULT_EXCLUDES } from '@releaseproof/sandbox';
 import { analyzeEnvironment } from '@releaseproof/environment';
 import { scanForSecrets, redactObject } from '@releaseproof/security';
 import { verifyBrowserApp } from '@releaseproof/browser';
+import { execCommand } from '@releaseproof/runner';
 
 import { runInstallCheck } from './checks/install.js';
 import { runBuildCheck } from './checks/build.js';
@@ -49,6 +50,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
   } catch {}
 
   const ignoreDirs: string[] = [
+    '.releaseproof-venv',
     ...((localConfig.ignoreDirs || []).filter((d): d is string => Boolean(d))),
     ...((options.config?.ignoreDirs || []).filter((d): d is string => Boolean(d))),
   ];
@@ -60,10 +62,29 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
       ...localConfig.checks,
       ...options.config?.checks,
     },
+    build: { ...localConfig.build, ...options.config?.build },
+    start: { ...localConfig.start, ...options.config?.start },
+    browser: { ...localConfig.browser, ...options.config?.browser },
+    environment: { ...localConfig.environment, ...options.config?.environment },
+    python: { ...localConfig.python, ...options.config?.python },
+    criticalRoutes: options.config?.criticalRoutes ?? localConfig.criticalRoutes ?? [],
     ignoreDirs,
   };
 
   const allChecks: CheckResult[] = [];
+
+  if (config.environment?.includeEnvFiles) {
+    allChecks.push({
+      id: 'environment-files-opt-in',
+      title: 'Secret-bearing environment files explicitly included',
+      category: 'security',
+      status: 'warn',
+      severity: 'medium',
+      summary: 'Configuration explicitly opted into copying .env files into the verification workspace. Their provided values are not automatically discoverable for value-based redaction.',
+      evidence: [],
+      remediation: 'Prefer environment.provide for required values so ReleaseProof can register them for redaction.',
+    });
+  }
 
   // Phase 1: Detect Project Profile
   progress('Detecting project profile', 'running');
@@ -73,6 +94,22 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     'done',
     `${profile.frameworks.map((f) => f.name).join(', ') || 'Standard app'} (${profile.packageManagers[0]?.type || 'npm'})`
   );
+
+  const primaryPackageManager = profile.packageManagers[0];
+  if (profile.languages.some((language) => language === 'javascript' || language === 'typescript')) {
+    allChecks.push({
+      id: 'install-lockfile-policy',
+      title: primaryPackageManager?.lockfile ? 'Lockfile-enforcing install selected' : 'Dependency lockfile not found',
+      category: 'install',
+      status: primaryPackageManager?.lockfile ? 'pass' : 'warn',
+      severity: primaryPackageManager?.lockfile ? 'info' : 'medium',
+      summary: primaryPackageManager?.lockfile
+        ? `Detected ${primaryPackageManager.lockfile}; authoritative verification uses a lockfile-enforcing install command.`
+        : 'No supported lockfile was detected, so dependency resolution cannot be fully reproducible.',
+      evidence: [],
+      remediation: primaryPackageManager?.lockfile ? undefined : 'Commit the package manager lockfile before release verification.',
+    });
+  }
 
   // Phase 2: Static Security & Environment Scans (on original source)
   if (config.checks?.secrets !== false) {
@@ -100,14 +137,42 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
   }
 
   // Phase 3: Setup Clean Environment
-  progress('Creating clean-room sandbox', 'running');
+  progress('Creating isolated clean verification workspace', 'running');
+  const copyExcludes = new Set(DEFAULT_EXCLUDES);
+  if (config.environment?.includeEnvFiles) {
+    for (const name of ['.env', '.env.local', '.env.development', '.env.test', '.env.production', '.env.development.local', '.env.test.local', '.env.production.local']) {
+      copyExcludes.delete(name);
+    }
+  }
   const workspace = options.skipSandbox
     ? { path: projectDir, dispose: async () => {} }
-    : await createCleanWorkspace(projectDir);
-  progress('Creating clean-room sandbox', 'done');
+    : await createCleanWorkspace(projectDir, { excludes: copyExcludes });
+  progress('Creating isolated clean verification workspace', 'done');
 
   let runningService: any = null;
   let activePort = config.start?.port || profile.ports[0] || 3000;
+  const browserDisabled = config.checks?.browser === false || config.browser?.enabled === false;
+  let browserVerification: VerificationReport['browserVerification'] = browserDisabled
+    ? { status: 'SKIPPED', reason: 'Browser verification was disabled by configuration.' }
+    : !profile.capabilities.browser
+      ? { status: 'SKIPPED', reason: 'API-only project: browser runtime verification is not applicable.' }
+      : { status: 'UNAVAILABLE', reason: 'Browser verification was not reached.' };
+  const allowHostEnv = config.environment?.allowHost ?? [];
+  const providedEnvironment = config.environment?.provide ?? {};
+  const sensitiveValues = [
+    ...Object.values(providedEnvironment).filter((value): value is string => typeof value === 'string'),
+    ...allowHostEnv.map((key) => process.env[key]).filter((value): value is string => Boolean(value)),
+  ];
+  if (config.environment?.includeEnvFiles) {
+    sensitiveValues.push(...await loadSensitiveEnvFileValues(projectDir, config.environment.envFile));
+  }
+  let installCommand = profile.commands.install;
+  let buildCommand = config.build?.command || profile.commands.build;
+  let startCommand = config.start?.command || profile.commands.start;
+  let executionEnvironment: Record<string, string | undefined> = { ...providedEnvironment };
+  const pythonRuntimeDir = profile.languages.includes('python')
+    ? path.join(workspace.path, '.releaseproof', `python-${randomBytes(6).toString('hex')}`)
+    : undefined;
 
   const onSignal = async () => {
     if (runningService) {
@@ -120,24 +185,63 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
   process.once('SIGTERM', onSignal);
 
   try {
+    if (profile.languages.includes('python') && (installCommand || buildCommand || startCommand)) {
+      const prepared = await preparePythonExecution(workspace.path, pythonRuntimeDir!, { installCommand, buildCommand, startCommand }, executionEnvironment, allowHostEnv, config.python?.interpreter);
+      if (!prepared.ok) {
+        allChecks.push({
+          id: 'python-interpreter-setup',
+          title: 'Isolated Python verification environment unavailable',
+          category: 'install',
+          status: 'unknown',
+          severity: 'high',
+          classification: 'VERIFICATION_UNAVAILABLE',
+          summary: prepared.error,
+          evidence: [],
+        });
+        throw new Error('Python verification environment unavailable.');
+      }
+      installCommand = prepared.installCommand;
+      buildCommand = prepared.buildCommand;
+      startCommand = prepared.startCommand;
+      executionEnvironment = prepared.environment;
+      allChecks.push({
+        id: 'python-interpreter-setup',
+        title: 'Isolated Python interpreter configured',
+        category: 'install',
+        status: 'pass',
+        severity: 'info',
+        summary: `Dependency installation and startup use the same workspace-local interpreter: ${prepared.interpreter}`,
+        evidence: [],
+      });
+    }
+
     // Phase 4: Clean Install
-    if (config.checks?.install !== false && profile.commands.install) {
-      progress('Running clean installation', 'running', profile.commands.install);
-      const installRes = await runInstallCheck(workspace.path, profile.commands.install);
+    if (config.checks?.install !== false && installCommand) {
+      progress('Running clean installation', 'running', installCommand);
+      const installRes = await runInstallCheck(workspace.path, installCommand, executionEnvironment, allowHostEnv);
       allChecks.push(installRes);
       progress('Running clean installation', installRes.status === 'block' ? 'fail' : 'done');
 
-      // If install completely blocked, do not try to build or start
+      // Build/start results are not meaningful when their dependency install did not complete.
       if (installRes.status === 'block') {
         throw new Error('Installation failed in clean environment.');
+      }
+      if (installRes.status === 'unknown') {
+        if (!browserDisabled && profile.capabilities.browser) {
+          browserVerification = {
+            status: 'UNAVAILABLE',
+            reason: 'Browser verification was not attempted because dependency installation could not be verified.',
+          };
+        }
+        throw new Error('Installation could not be verified in the current environment.');
       }
     }
 
     // Phase 5: Production Build
-    const buildCmd = config.build?.command || profile.commands.build;
+    const buildCmd = buildCommand;
     if (config.checks?.build !== false && buildCmd) {
       progress('Running production build', 'running', buildCmd);
-      const buildRes = await runBuildCheck(workspace.path, buildCmd);
+      const buildRes = await runBuildCheck(workspace.path, buildCmd, executionEnvironment, allowHostEnv);
       allChecks.push(buildRes);
       progress('Running production build', buildRes.status === 'block' ? 'fail' : 'done');
 
@@ -147,7 +251,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     }
 
     // Phase 6: Production Startup & Health Check
-    const startCmd = config.start?.command || profile.commands.start;
+    const startCmd = startCommand;
     if (config.checks?.startup !== false && startCmd) {
       progress('Starting production server', 'running', `port ${activePort}`);
       const startupRes = await runStartupCheck(
@@ -155,7 +259,10 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
         startCmd,
         activePort,
         config.start?.timeoutMs ?? 30000,
-        config.start?.healthCheckPath ?? '/'
+        config.start?.healthCheckPath ?? '/',
+        config.start?.stabilityWindowMs ?? 5000,
+        executionEnvironment,
+        allowHostEnv
       );
 
       allChecks.push(startupRes.checkResult);
@@ -166,18 +273,28 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
       progress('Starting production server', startedOk ? 'done' : 'fail');
 
       // Phase 7: Browser / Route Verification
-      if (startedOk && config.checks?.browser !== false) {
+      if (startedOk && config.checks?.browser !== false && config.browser?.enabled !== false) {
         progress('Verifying application in browser', 'running');
         const browserRes = await verifyBrowserApp({
           baseUrl: `http://127.0.0.1:${activePort}`,
-          initialRoutes: profile.entrypoints.length > 0 ? profile.entrypoints : ['/'],
+          initialRoutes: Array.from(new Set([
+            ...(profile.entrypoints.length > 0 ? profile.entrypoints : ['/']),
+            ...(config.criticalRoutes ?? []),
+          ])),
           maxPages: config.browser?.maxPages ?? 15,
           maxDepth: config.browser?.maxDepth ?? 3,
           screenshotsDir,
           headless: config.browser?.headless ?? true,
+          timeoutMs: config.browser?.timeoutMs ?? 15000,
+          observationWindowMs: config.browser?.observationWindowMs ?? 2000,
+          requiresBrowserRuntime: profile.capabilities.browser,
         });
 
         allChecks.push(...browserRes.checks);
+        browserVerification = {
+          status: browserRes.capabilityStatus,
+          ...(browserRes.capabilityReason ? { reason: browserRes.capabilityReason } : {}),
+        };
         const browserHasErrors = browserRes.checks.some((c) => c.status === 'block');
         progress('Verifying application in browser', browserHasErrors ? 'fail' : 'done', `${browserRes.pagesVisited} route(s) checked`);
       }
@@ -193,15 +310,19 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
   } catch (err: unknown) {
     const isExpectedShortCircuit =
       err instanceof Error &&
-      (err.message.includes('failed in clean environment') || err.message.includes('build failed'));
+      (err.message.includes('failed in clean environment') ||
+        err.message.includes('could not be verified in the current environment') ||
+        err.message.includes('build failed') ||
+        err.message.includes('Python verification environment unavailable'));
 
     if (!isExpectedShortCircuit) {
       allChecks.push({
         id: 'engine-unexpected-error',
         title: 'Verification engine pipeline error',
         category: 'runtime',
-        status: 'block',
-        severity: 'blocker',
+        status: 'unknown',
+        severity: 'high',
+        classification: 'RELEASEPROOF_INTERNAL_ERROR',
         summary: `Pipeline encountered an unexpected runtime failure: ${err instanceof Error ? err.message : String(err)}`,
         evidence: [],
       });
@@ -214,7 +335,36 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
         await runningService.kill();
       } catch {}
     }
-    await workspace.dispose();
+    if (pythonRuntimeDir) {
+      try {
+        await fs.rm(pythonRuntimeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+      } catch (cleanupError: unknown) {
+        allChecks.push({
+          id: 'python-runtime-cleanup-error',
+          title: 'Python runtime cleanup failed',
+          category: 'security',
+          status: 'unknown',
+          severity: 'high',
+          classification: 'RELEASEPROOF_INTERNAL_ERROR',
+          summary: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+          evidence: [],
+        });
+      }
+    }
+    try {
+      await workspace.dispose();
+    } catch (cleanupError: unknown) {
+      allChecks.push({
+        id: 'workspace-cleanup-error',
+        title: 'Temporary workspace cleanup failed',
+        category: 'security',
+        status: 'unknown',
+        severity: 'high',
+        classification: 'RELEASEPROOF_INTERNAL_ERROR',
+        summary: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+        evidence: [],
+      });
+    }
   }
 
   // Phase 9: Scoring & Report Compilation
@@ -229,7 +379,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
 
   const rawReport: VerificationReport = {
     id: reportId,
-    version: '0.1.0',
+    version: '0.2.0-dev.0',
     timestamp: new Date().toISOString(),
     projectName: profile.name,
     projectPath: relProjectPath,
@@ -242,6 +392,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     categoryScores: scoreResult.categoryScores,
     counts: scoreResult.counts,
     checks: allChecks,
+    browserVerification,
     durationMs,
     artifactsDir: relArtifactsDir,
     jsonReportPath: relJsonPath,
@@ -249,11 +400,113 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     fixPromptPath: relFixPath,
   };
 
-  const report = redactObject(rawReport);
+  const report = redactObject(rawReport, sensitiveValues);
 
   // Save JSON report using absolute path on disk
   const absoluteJsonPath = path.join(artifactsDir, 'report.json');
   await fs.writeFile(absoluteJsonPath, JSON.stringify(report, null, 2), 'utf-8');
 
   return report;
+}
+
+interface PythonCommands {
+  installCommand?: string;
+  buildCommand?: string;
+  startCommand?: string;
+}
+
+async function preparePythonExecution(
+  workspaceDir: string,
+  venvDir: string,
+  commands: PythonCommands,
+  baseEnvironment: Record<string, string | undefined>,
+  allowHostEnv: string[],
+  explicitInterpreter?: string
+): Promise<(PythonCommands & { ok: true; interpreter: string; environment: Record<string, string | undefined> }) | { ok: false; error: string }> {
+  const candidates = explicitInterpreter
+    ? [JSON.stringify(path.resolve(explicitInterpreter))]
+    : process.platform === 'win32' ? ['py -3', 'python'] : ['python3', 'python'];
+  let lastError = 'No Python interpreter candidate succeeded.';
+
+  for (const candidate of candidates) {
+    const result = await execCommand(`${candidate} -m venv ${JSON.stringify(venvDir)}`, {
+      cwd: workspaceDir,
+      timeoutMs: 60000,
+      env: baseEnvironment,
+      allowHostEnv,
+    });
+    if (result.exitCode === 0) {
+      const interpreterCandidates = process.platform === 'win32'
+        ? [path.join(venvDir, 'Scripts/python.exe'), path.join(venvDir, 'bin/python.exe'), path.join(venvDir, 'bin/python')]
+        : [path.join(venvDir, 'bin/python')];
+      let resolvedInterpreter: string | undefined;
+      for (const candidatePath of interpreterCandidates) {
+        try {
+          await fs.access(candidatePath);
+          resolvedInterpreter = candidatePath;
+          break;
+        } catch {}
+      }
+      if (!resolvedInterpreter) {
+        lastError = `${candidate} created a virtual environment without a usable interpreter.`;
+        continue;
+      }
+      const pipProbe = await execCommand(`${JSON.stringify(resolvedInterpreter)} -m pip --version`, {
+        cwd: workspaceDir,
+        timeoutMs: 30000,
+        env: baseEnvironment,
+        allowHostEnv,
+      });
+      if (pipProbe.exitCode !== 0) {
+        lastError = `${candidate} created a virtual environment whose pip is unusable: ${pipProbe.stderr.trim() || pipProbe.stdout.trim() || `exit ${pipProbe.exitCode}`}`;
+        continue;
+      }
+      const binDir = path.dirname(resolvedInterpreter);
+      const environment = {
+        ...baseEnvironment,
+        VIRTUAL_ENV: venvDir,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}`,
+      };
+      const quote = JSON.stringify(resolvedInterpreter);
+      const rewrite = (command?: string) => {
+        if (!command) return command;
+        if (/^(?:python|python3|py\s+-3)\s+-m\s+pip\s+/i.test(command)) {
+          return command.replace(/^(?:python|python3|py\s+-3)\s+-m\s+pip/i, `${quote} -m pip`);
+        }
+        if (/^(?:pip|pip3|uv\s+pip)\s+/i.test(command)) {
+          return command.replace(/^(?:pip|pip3|uv\s+pip)/i, `${quote} -m pip`);
+        }
+        return command.replace(/^(?:python|python3|py\s+-3)\b/i, quote);
+      };
+      return {
+        ok: true,
+        interpreter: resolvedInterpreter,
+        environment,
+        installCommand: rewrite(commands.installCommand),
+        buildCommand: rewrite(commands.buildCommand),
+        startCommand: rewrite(commands.startCommand),
+      };
+    }
+    lastError = result.stderr.trim() || result.stdout.trim() || `${candidate} exited with ${result.exitCode}`;
+  }
+
+  return { ok: false, error: `Could not create workspace-local Python virtual environment: ${lastError}` };
+}
+
+async function loadSensitiveEnvFileValues(projectDir: string, configuredFile?: string): Promise<string[]> {
+  const names = configuredFile
+    ? [configuredFile]
+    : ['.env', '.env.local', '.env.development', '.env.test', '.env.production', '.env.development.local', '.env.test.local', '.env.production.local'];
+  const values: string[] = [];
+  for (const name of names) {
+    try {
+      const content = await fs.readFile(path.resolve(projectDir, name), 'utf8');
+      for (const line of content.split(/\r?\n/)) {
+        const match = line.match(/^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:"([^"]*)"|'([^']*)'|(.*))\s*$/);
+        const value = match?.[1] ?? match?.[2] ?? match?.[3]?.trim();
+        if (value && value.length >= 4) values.push(value);
+      }
+    } catch {}
+  }
+  return values;
 }

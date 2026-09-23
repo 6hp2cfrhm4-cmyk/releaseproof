@@ -25,50 +25,61 @@ inputs:
 outputs:
   score:
     description: 'Readiness score from 0 to 100'
+    value: ${{ steps.releaseproof.outputs.score }}
   status:
-    description: 'Verification status: READY or NOT_READY'
+    description: 'Verification status: READY, NOT_READY, or INCOMPLETE'
+    value: ${{ steps.releaseproof.outputs.status }}
   blockers-count:
     description: 'Number of verified blockers'
+    value: ${{ steps.releaseproof.outputs.blockers-count }}
   warnings-count:
     description: 'Number of warnings'
+    value: ${{ steps.releaseproof.outputs.warnings-count }}
   html-report:
     description: 'Path to the generated standalone HTML report'
+    value: ${{ steps.releaseproof.outputs.html-report }}
   ai-fix-prompt:
     description: 'Path to the generated AI remediation prompt'
+    value: ${{ steps.releaseproof.outputs.ai-fix-prompt }}
 
 runs:
   using: 'composite'
   steps:
-    - name: Run ReleaseProof
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 9
+
+    - name: Build and run repository-local ReleaseProof
+      id: releaseproof
       shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_PORT: ${{ inputs.port }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
+        INPUT_FAIL_ON_BLOCKER: ${{ inputs.fail-on-blocker }}
       run: |
-        ARGS="--ci"
-        if [ -n "${{ inputs.port }}" ]; then
-          ARGS="$ARGS --port ${{ inputs.port }}"
+        set -uo pipefail
+        ARGS=(verify "$INPUT_PATH" --ci)
+        if [ -n "$INPUT_PORT" ]; then
+          ARGS+=(--port "$INPUT_PORT")
         fi
-        if [ -n "${{ inputs.timeout }}" ]; then
-          ARGS="$ARGS --timeout ${{ inputs.timeout }}"
+        if [ -n "$INPUT_TIMEOUT" ]; then
+          ARGS+=(--timeout "$INPUT_TIMEOUT")
         fi
-        
-        echo "Running ReleaseProof on ${{ inputs.path }}..."
+
+        pnpm install --dir "$GITHUB_ACTION_PATH" --frozen-lockfile
+        pnpm --dir "$GITHUB_ACTION_PATH" run build
+
+        echo "Running ReleaseProof on $INPUT_PATH..."
         EXIT_CODE=0
-        RELEASE_TARBALL="https://github.com/6hp2cfrhm4-cmyk/releaseproof/releases/download/v0.1.0/releaseproof-0.1.0.tgz"
-        npx --yes "$RELEASE_TARBALL" verify "${{ inputs.path }}" $ARGS || EXIT_CODE=$?
+        node "$GITHUB_ACTION_PATH/apps/cli/dist/index.js" "${ARGS[@]}" || EXIT_CODE=$?
 
-        REPORT_JSON="${{ inputs.path }}/.releaseproof/report.json"
-        if [ -f "$REPORT_JSON" ] && [ -n "$GITHUB_STEP_SUMMARY" ]; then
-          node -e "
-            const fs = require('fs');
-            const r = JSON.parse(fs.readFileSync('$REPORT_JSON', 'utf-8'));
-            const statusEmoji = r.verdict === 'READY' ? '✅' : '❌';
-            let summary = '### ' + statusEmoji + ' ReleaseProof Verification: ' + r.verdict + '\n\n';
-            summary += '- **Score**: ' + r.score + ' / 100\n';
-            summary += '- **Blockers**: ' + (r.counts?.blockers ?? 0) + '\n';
-            summary += '- **Warnings**: ' + (r.counts?.warnings ?? 0) + '\n\n';
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
-          "
+        REPORT_JSON="$INPUT_PATH/.releaseproof/report.json"
+        if [ -f "$REPORT_JSON" ]; then
+          node "$GITHUB_ACTION_PATH/scripts/write-action-results.mjs" "$REPORT_JSON"
         fi
 
-        if [ "${{ inputs.fail-on-blocker }}" = "true" ] && [ "$EXIT_CODE" -ne 0 ]; then
+        if [ "$EXIT_CODE" -eq 3 ] || { [ "$INPUT_FAIL_ON_BLOCKER" = "true" ] && [ "$EXIT_CODE" -ne 0 ]; }; then
           exit $EXIT_CODE
         fi

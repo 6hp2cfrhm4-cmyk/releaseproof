@@ -5,16 +5,24 @@ import { ProjectProfileSchema } from './profile.js';
 export const CategoryScoreSchema = z.object({
   max: z.number(),
   score: z.number(),
-  status: z.enum(['pass', 'warn', 'fail', 'skipped', 'unknown']),
+  status: z.enum(['pass', 'warn', 'fail', 'skipped', 'unknown', 'not_applicable']),
 });
 export type CategoryScore = z.infer<typeof CategoryScoreSchema>;
 
 export const VerificationVerdictSchema = z.enum(['READY', 'NOT_READY', 'INCOMPLETE']);
 export type VerificationVerdict = z.infer<typeof VerificationVerdictSchema>;
 
+export const BrowserVerificationStatusSchema = z.enum([
+  'VERIFIED',
+  'HTTP_FALLBACK',
+  'UNAVAILABLE',
+  'SKIPPED',
+]);
+export type BrowserVerificationStatus = z.infer<typeof BrowserVerificationStatusSchema>;
+
 export const VerificationReportSchema = z.object({
   id: z.string(),
-  version: z.string().default('0.1.0'),
+  version: z.string().default('0.2.0-dev.0'),
   timestamp: z.string(),
   projectName: z.string(),
   projectPath: z.string(),
@@ -29,7 +37,12 @@ export const VerificationReportSchema = z.object({
     blockers: z.number(),
     unknown: z.number(),
     skipped: z.number(),
+    notApplicable: z.number(),
   }),
+  browserVerification: z.object({
+    status: BrowserVerificationStatusSchema,
+    reason: z.string().optional(),
+  }).default({ status: 'SKIPPED' }),
   checks: z.array(CheckResultSchema),
   durationMs: z.number(),
   artifactsDir: z.string(),

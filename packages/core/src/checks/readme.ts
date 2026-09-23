@@ -58,7 +58,7 @@ export async function runReadmeContractCheck(
 
       const cmdLine = trimmed.startsWith('$ ') ? trimmed.slice(2).trim() : trimmed;
       const runMatch = cmdLine.match(/^(?:npm run|pnpm run|pnpm|yarn)\s+([a-zA-Z0-9_:-]+)/);
-      if (runMatch && !['install', 'test', 'run'].includes(runMatch[1])) {
+      if (runMatch && !['i', 'install', 'add', 'remove', 'update', 'upgrade', 'test', 'run', 'exec', 'dlx'].includes(runMatch[1])) {
         documentedNpmRunCommands.push(runMatch[1]);
       }
     }

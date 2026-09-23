@@ -45,7 +45,9 @@ const mockReport: VerificationReport = {
     blockers: 2,
     unknown: 0,
     skipped: 0,
+    notApplicable: 0,
   },
+  browserVerification: { status: 'VERIFIED' },
   checks: [
     {
       id: 'build-fail',
@@ -88,7 +90,7 @@ describe('reporters', () => {
     const md = generateAiHandoffMarkdown(mockReport);
     expect(md).toContain('# ReleaseProof Fix Task');
     expect(md).toContain('Build command failed with code 1');
-    expect(md).toContain('npx releaseproof verify');
+    expect(md).toContain('releaseproof verify');
   });
 
   it('generates standalone HTML report', () => {

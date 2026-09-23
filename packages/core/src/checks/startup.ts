@@ -4,7 +4,6 @@ import {
   RunningService,
   checkHealthEndpoint,
   isPortListening,
-  waitForPortClose,
 } from '@releaseproof/runner';
 import { detectExternalServiceDependency } from './external-services.js';
 
@@ -19,7 +18,10 @@ export async function runStartupCheck(
   startCommand?: string,
   port = 3000,
   timeoutMs = 30000,
-  healthPath = '/'
+  healthPath = '/',
+  stabilityWindowMs = 5000,
+  environment: Record<string, string | undefined> = {},
+  allowHostEnv: string[] = []
 ): Promise<StartupCheckResult> {
   if (!startCommand) {
     return {
@@ -35,14 +37,27 @@ export async function runStartupCheck(
     };
   }
 
-  // Ensure port is not lingering in CLOSE_WAIT before spawning
+  // A listener that predates this run cannot be used as target evidence.
   if (await isPortListening(port, '127.0.0.1', 200)) {
-    await waitForPortClose(port, '127.0.0.1', 1000);
+    return {
+      checkResult: {
+        id: 'startup-port-occupied',
+        title: 'Verification port was already occupied',
+        category: 'runtime',
+        status: 'unknown',
+        severity: 'medium',
+        classification: 'VERIFICATION_UNAVAILABLE',
+        summary: `Port ${port} was accepting connections before the target was started. The existing listener was not killed or used as application evidence.`,
+        evidence: [],
+        remediation: 'Stop the unrelated listener or configure a free port and run verification again.',
+      },
+    };
   }
 
   const service = spawnService(startCommand, {
     cwd: workspaceDir,
-    env: { PORT: String(port) },
+    env: { ...environment, PORT: String(port) },
+    allowHostEnv,
   });
 
   const isReady = await service.waitForPort(port, timeoutMs);
@@ -80,6 +95,7 @@ export async function runStartupCheck(
             requiresExternalService: true,
             service: extDep.name,
           },
+          classification: 'EXTERNAL_DEPENDENCY_UNAVAILABLE',
         },
       };
     }
@@ -96,6 +112,7 @@ export async function runStartupCheck(
           : `Server crashed immediately on startup. Process exited before port ${port} opened.`,
         evidence: [evidence],
         remediation: 'Check startup logs for runtime errors, missing environment variables, or uncaught exceptions during boot.',
+        classification: 'APPLICATION_FAILURE',
       },
     };
   }
@@ -144,6 +161,7 @@ export async function runStartupCheck(
             requiresExternalService: true,
             service: extDep.name,
           },
+          classification: 'EXTERNAL_DEPENDENCY_UNAVAILABLE',
         },
       };
     }
@@ -160,8 +178,50 @@ export async function runStartupCheck(
         summary: `Application started on port ${port} but initial request to ${healthPath} failed with HTTP ${health.status}.`,
         evidence: [procEvidence, httpEvidence],
         remediation: 'Inspect server logs for unhandled exceptions or database connection failures during root route handling.',
+        classification: 'APPLICATION_FAILURE',
       },
     };
+  }
+
+  // A single successful response is not sufficient: observe both ownership process
+  // and HTTP health for a bounded stability window.
+  const stabilityStarted = Date.now();
+  let lastHealth = health;
+  while (Date.now() - stabilityStarted < stabilityWindowMs) {
+    await new Promise((resolve) => setTimeout(resolve, Math.min(500, Math.max(50, stabilityWindowMs))));
+    if (!service.isAlive()) {
+      const crashedLogs = service.getLogs();
+      await service.kill();
+      return {
+        checkResult: {
+          id: 'startup-stability',
+          title: 'Production server crashed during stability observation',
+          category: 'runtime',
+          status: 'block',
+          severity: 'blocker',
+          classification: 'APPLICATION_FAILURE',
+          summary: `Application exited within the ${stabilityWindowMs}ms startup stability window.`,
+          evidence: [{ ...procEvidence, alive: false, stdoutTail: crashedLogs.stdout.slice(-1000), stderrTail: crashedLogs.stderr.slice(-2000) }],
+          remediation: 'Inspect the process logs and fix delayed startup/background-task failures.',
+        },
+      };
+    }
+    lastHealth = await checkHealthEndpoint(healthUrl, Math.min(2000, Math.max(250, timeoutMs)));
+    if (!lastHealth.ok && (lastHealth.status === 0 || lastHealth.status >= 500)) {
+      await service.kill();
+      return {
+        checkResult: {
+          id: 'startup-stability',
+          title: 'Production server became unhealthy during stability observation',
+          category: 'runtime',
+          status: 'block',
+          severity: 'blocker',
+          classification: 'APPLICATION_FAILURE',
+          summary: `Application health changed to HTTP ${lastHealth.status} within the ${stabilityWindowMs}ms stability window.`,
+          evidence: [procEvidence, { ...httpEvidence, statusCode: lastHealth.status, responsePreview: lastHealth.body.slice(0, 300) }],
+        },
+      };
+    }
   }
 
   return {
@@ -173,7 +233,7 @@ export async function runStartupCheck(
       category: 'runtime',
       status: 'pass',
       severity: 'info',
-      summary: `Application successfully started on port ${port} and responded to health check with HTTP ${health.status} (${health.durationMs}ms).`,
+      summary: `Application started on port ${port}, responded with HTTP ${lastHealth.status}, and remained stable for ${stabilityWindowMs}ms.`,
       evidence: [procEvidence, httpEvidence],
     },
   };

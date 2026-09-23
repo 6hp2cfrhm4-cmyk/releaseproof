@@ -6,11 +6,34 @@ import { tokenizeCommandLine, resolveBinaryForPlatform } from './command-parser.
 export interface CommandOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
+  allowHostEnv?: string[];
   timeoutMs?: number;
   maxBufferBytes?: number;
   onStdout?: (data: string) => void;
   onStderr?: (data: string) => void;
   shell?: boolean | string;
+}
+
+const BASE_HOST_ENV = [
+  'PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC',
+  'TEMP', 'TMP', 'HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA',
+];
+
+/** Builds the deliberately small host environment exposed to verified code. */
+export function buildVerificationEnv(
+  overrides: Record<string, string | undefined> = {},
+  allowHostEnv: string[] = []
+): NodeJS.ProcessEnv {
+  const result: NodeJS.ProcessEnv = {};
+  for (const key of new Set([...BASE_HOST_ENV, ...allowHostEnv])) {
+    if (process.env[key] !== undefined) result[key] = process.env[key];
+  }
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value !== undefined) result[key] = value;
+  }
+  result.CI = 'true';
+  result.FORCE_COLOR = '0';
+  return result;
 }
 
 export interface CommandResult {
@@ -27,12 +50,7 @@ export interface CommandResult {
  * Spawns a process securely, avoiding shell invocation whenever possible.
  */
 function spawnSecure(command: string, options: CommandOptions): ChildProcess {
-  const mergedEnv = {
-    ...process.env,
-    ...options.env,
-    CI: 'true',
-    FORCE_COLOR: '0',
-  };
+  const mergedEnv = buildVerificationEnv(options.env, options.allowHostEnv);
 
   const isWindows = process.platform === 'win32';
   const detached = !isWindows;
@@ -176,12 +194,7 @@ export function execFileArgs(
     let killed = false;
     let timer: NodeJS.Timeout | null = null;
 
-    const mergedEnv = {
-      ...process.env,
-      ...options.env,
-      CI: 'true',
-      FORCE_COLOR: '0',
-    };
+    const mergedEnv = buildVerificationEnv(options.env, options.allowHostEnv);
 
     const { binary } = resolveBinaryForPlatform(executable);
     const child = spawn(binary, args, {

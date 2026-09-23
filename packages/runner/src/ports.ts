@@ -90,7 +90,7 @@ export function checkHealthEndpoint(
           path: parsed.pathname + parsed.search,
           method: 'GET',
           headers: {
-            'User-Agent': 'ReleaseProof-HealthChecker/0.1.0',
+            'User-Agent': 'ReleaseProof-HealthChecker/0.2.0-dev.0',
             Accept: '*/*',
           },
           timeout: timeoutMs,
@@ -175,4 +175,3 @@ export async function waitForPortClose(
   }
   return false;
 }
-

@@ -20,6 +20,12 @@ describe('browser verification', () => {
       } else if (req.url === '/crash') {
         res.writeHead(500, { 'Content-Type': 'text/plain' });
         res.end('Internal Server Error');
+      } else if (req.url === '/delayed') {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<html><body><h1>Delayed</h1><script>setTimeout(() => { throw new Error("delayed boom") }, 150)</script></body></html>');
+      } else if (req.url === '/no-content') {
+        res.writeHead(204);
+        res.end();
       } else {
         res.writeHead(404);
         res.end('Not Found');
@@ -60,5 +66,45 @@ describe('browser verification', () => {
     expect(errorCheck).toBeDefined();
     expect(errorCheck?.status).toBe('block');
     expect(errorCheck?.severity).toBe('blocker');
+  });
+
+  it('models Playwright unavailability as HTTP fallback, not browser pass', async () => {
+    const res = await verifyBrowserApp({
+      baseUrl,
+      initialRoutes: ['/about'],
+      maxDepth: 0,
+      forceHttpFallback: true,
+      requiresBrowserRuntime: true,
+      screenshotsDir: path.join(os.tmpdir(), 'rp-test-screenshots'),
+    });
+    expect(res.capabilityStatus).toBe('HTTP_FALLBACK');
+    expect(res.checks.find((c) => c.id === 'browser-runtime-unavailable')?.status).toBe('unknown');
+    expect(res.checks.find((c) => c.id === 'browser-routes-verified')).toBeUndefined();
+  });
+
+  it('treats HTTP 204 as a successful API response rather than a blank browser page', async () => {
+    const res = await verifyBrowserApp({
+      baseUrl,
+      initialRoutes: ['/no-content'],
+      maxDepth: 0,
+      requiresBrowserRuntime: false,
+      screenshotsDir: path.join(os.tmpdir(), 'rp-test-screenshots'),
+    });
+    expect(res.capabilityStatus).toBe('SKIPPED');
+    expect(res.checks.find((c) => c.id === 'browser-blank-page')).toBeUndefined();
+    expect(res.checks.find((c) => c.id === 'browser-routes-verified')?.category).toBe('api');
+  });
+
+  it('captures a JavaScript exception raised after DOMContentLoaded', async () => {
+    const res = await verifyBrowserApp({
+      baseUrl,
+      initialRoutes: ['/delayed'],
+      maxDepth: 0,
+      observationWindowMs: 400,
+      requiresBrowserRuntime: true,
+      screenshotsDir: path.join(os.tmpdir(), 'rp-test-screenshots'),
+    });
+    expect(res.capabilityStatus).toBe('VERIFIED');
+    expect(res.checks.find((c) => c.id === 'browser-uncaught-exceptions')?.status).toBe('block');
   });
 });

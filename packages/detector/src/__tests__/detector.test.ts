@@ -33,10 +33,48 @@ describe('detector', () => {
     expect(profile.frameworks[0].type).toBe('nextjs');
     expect(profile.packageManagers[0].type).toBe('pnpm');
     expect(profile.commands.build).toBe('pnpm build');
+    expect(profile.commands.install).toBe('pnpm install --frozen-lockfile');
     expect(profile.commands.start).toBe('pnpm start');
     expect(profile.capabilities.browser).toBe(true);
     expect(profile.entrypoints).toContain('/');
     expect(profile.entrypoints).toContain('/dashboard');
+  });
+
+  it('uses lockfile-enforcing npm installation when package-lock exists', async () => {
+    await fs.mkdir(testRoot, { recursive: true });
+    await fs.writeFile(path.join(testRoot, 'package.json'), JSON.stringify({ name: 'locked-node-app' }));
+    await fs.writeFile(path.join(testRoot, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3 }));
+    const profile = await detectProject(testRoot);
+    expect(profile.commands.install).toBe('npm ci');
+  });
+
+  it('uses the Vite production preview port rather than the dev-server port', async () => {
+    await fs.mkdir(testRoot, { recursive: true });
+    await fs.writeFile(path.join(testRoot, 'package.json'), JSON.stringify({
+      name: 'vite-app', dependencies: { vite: '6.0.0' }, scripts: { build: 'vite build', preview: 'vite preview' },
+    }));
+    const profile = await detectProject(testRoot);
+    expect(profile.ports).toContain(4173);
+    expect(profile.ports).not.toContain(5173);
+    expect(profile.commands.start).toContain('--host 127.0.0.1 --port 4173');
+  });
+
+  it('does not append Vite flags to a custom preview runtime', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'rp-detector-vite-custom-'));
+    try {
+      await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({
+        name: 'vite-custom-preview',
+        dependencies: { vite: '6.0.0' },
+        scripts: { preview: 'node server.cjs' },
+      }));
+      await fs.writeFile(path.join(root, 'server.cjs'), 'require("node:http").createServer((_q,r)=>r.end("ok")).listen(5173);');
+      const profile = await detectProject(root);
+      expect(profile.commands.start).toBe('npm run preview');
+      expect(profile.ports).toContain(5173);
+      expect(profile.ports).not.toContain(4173);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   it('detects FastAPI application with uvicorn', async () => {

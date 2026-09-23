@@ -294,7 +294,7 @@ export function generateHtmlReport(report: VerificationReport): string {
       <div>
         <div class="verdict-title">${report.verdict === 'READY' ? 'READY TO SHIP' : report.verdict === 'INCOMPLETE' ? 'VERIFICATION INCOMPLETE' : 'NOT READY TO SHIP'}</div>
         <div class="verdict-subtitle">
-          ${report.counts.blockers} Blocker(s) &bull; ${report.counts.warnings} Warning(s) &bull; ${report.counts.unknown || 0} External Dependency(ies) &bull; ${report.counts.passed} Passed
+          ${report.counts.blockers} Blocker(s) &bull; ${report.counts.warnings} Warning(s) &bull; ${report.counts.unknown || 0} Incomplete Check(s) &bull; ${report.counts.passed} Passed
         </div>
       </div>
       <div>

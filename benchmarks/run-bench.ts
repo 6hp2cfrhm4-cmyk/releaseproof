@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pc from 'picocolors';
 import { verifyProject } from '@releaseproof/core';
+import { allFixtures, cleanupFixtureArtifacts } from './setup-fixtures.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesRoot = path.resolve(__dirname, '..', 'fixtures');
@@ -13,6 +14,9 @@ interface FixtureExpected {
   expectedWarningCategory?: string;
   minBlockers?: number;
   minWarnings?: number;
+  maxBlockers?: number;
+  maxWarnings?: number;
+  expectedBrowserVerification?: 'VERIFIED' | 'HTTP_FALLBACK' | 'UNAVAILABLE' | 'SKIPPED';
 }
 
 interface BenchResult {
@@ -29,7 +33,12 @@ interface BenchResult {
 }
 
 export async function runBenchmark(): Promise<void> {
+  const mode = (process.env.RELEASEPROOF_BENCH_MODE || 'AUTHORITATIVE').toUpperCase();
+  if (mode !== 'FAST' && mode !== 'AUTHORITATIVE') {
+    throw new Error(`Unsupported RELEASEPROOF_BENCH_MODE: ${mode}`);
+  }
   console.log('');
+  console.log(pc.dim(`Mode: ${mode}`));
   console.log(pc.bold('═══════════════════════════════════════════════════════════'));
   console.log(pc.bold('               RELEASEPROOF BENCHMARK SUITE                '));
   console.log(pc.bold('═══════════════════════════════════════════════════════════'));
@@ -37,7 +46,16 @@ export async function runBenchmark(): Promise<void> {
   console.log('');
 
   const entries = await fs.readdir(fixturesRoot, { withFileTypes: true });
-  const fixtureDirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+  const requestedFixtures = new Set(
+    (process.env.RELEASEPROOF_BENCH_FIXTURES || '')
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean)
+  );
+  const fixtureDirs = entries
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .filter((name) => requestedFixtures.size === 0 || requestedFixtures.has(name));
 
   const results: BenchResult[] = [];
   let tp = 0; // True Positives: broken apps correctly blocked
@@ -61,14 +79,19 @@ export async function runBenchmark(): Promise<void> {
     try {
       const report = await verifyProject({
         projectDir: fixDir,
-        skipSandbox: true, // run in-place for benchmark speed
+        skipSandbox: mode === 'FAST',
         config: {
+          ...(process.env.RELEASEPROOF_PYTHON_INTERPRETER
+            ? { python: { interpreter: process.env.RELEASEPROOF_PYTHON_INTERPRETER } }
+            : {}),
           start: {
-            timeoutMs: 2500, // fast timeout for bench
+            timeoutMs: mode === 'FAST' ? 2500 : 10000,
+            stabilityWindowMs: mode === 'FAST' ? 250 : 1000,
           },
           browser: {
             maxPages: 3,
-            timeoutMs: 3000,
+            timeoutMs: mode === 'FAST' ? 3000 : 10000,
+            observationWindowMs: mode === 'FAST' ? 100 : 500,
           },
         },
       });
@@ -90,7 +113,16 @@ export async function runBenchmark(): Promise<void> {
       if (isMissedBug) fn++;
       if (report.counts.unknown > 0) totalUnknowns++;
 
-      const match = !isFalseBlocker && !isMissedBug;
+      const blockerCategories = new Set(report.checks.filter((c) => c.status === 'block').map((c) => c.category));
+      const warningCategories = new Set(report.checks.filter((c) => c.status === 'warn').map((c) => c.category));
+      const match = report.verdict === expected.expectedVerdict
+        && (expected.expectedBlockerCategory === undefined || blockerCategories.has(expected.expectedBlockerCategory as any))
+        && (expected.expectedWarningCategory === undefined || warningCategories.has(expected.expectedWarningCategory as any))
+        && (expected.minBlockers === undefined || report.counts.blockers >= expected.minBlockers)
+        && (expected.maxBlockers === undefined || report.counts.blockers <= expected.maxBlockers)
+        && (expected.minWarnings === undefined || report.counts.warnings >= expected.minWarnings)
+        && (expected.maxWarnings === undefined || report.counts.warnings <= expected.maxWarnings)
+        && (expected.expectedBrowserVerification === undefined || report.browserVerification.status === expected.expectedBrowserVerification);
 
       results.push({
         name,
@@ -109,6 +141,14 @@ export async function runBenchmark(): Promise<void> {
       const timeStr = `${(durationMs / 1000).toFixed(1)}s`.padStart(5, ' ');
       const verdictStr = report.verdict.padEnd(10, ' ');
       console.log(`  ${mark} ${name.padEnd(30, ' ')} ${verdictStr} (${report.counts.blockers}b, ${report.counts.warnings}w, ${report.counts.unknown}u) ${pc.dim(timeStr)}`);
+      if (!match) {
+        console.log(`    expected=${expected.expectedVerdict}` +
+          ` blockerCategory=${expected.expectedBlockerCategory ?? '-'} warningCategory=${expected.expectedWarningCategory ?? '-'} browser=${expected.expectedBrowserVerification ?? '-'}`);
+        console.log(`    actual blockers=${[...blockerCategories].join(',') || '-'} warnings=${[...warningCategories].join(',') || '-'} browser=${report.browserVerification.status}`);
+        for (const check of report.checks.filter((item) => item.status === 'block' || item.status === 'unknown')) {
+          console.log(`    ${check.id}: ${check.summary}`);
+        }
+      }
     } catch (err: unknown) {
       console.log(`  ${pc.red('✗')} ${name.padEnd(30, ' ')} ERROR: ${err}`);
       results.push({
@@ -123,6 +163,9 @@ export async function runBenchmark(): Promise<void> {
         durationMs: 0,
         passed: false,
       });
+    } finally {
+      const fixture = allFixtures.find((item) => item.name === name);
+      await cleanupFixtureArtifacts(fixDir, Boolean(fixture && Object.hasOwn(fixture.files, 'package-lock.json')));
     }
   }
 
@@ -143,8 +186,9 @@ export async function runBenchmark(): Promise<void> {
   console.log(`  Total Runtime:         ${(totalDuration / 1000).toFixed(1)}s`);
   console.log(pc.dim('─'.repeat(45)));
 
-  if (fp > 0) {
-    console.error(pc.bold(pc.red(`\nFAILED: Found ${fp} false blocker(s)! False blockers must be 0.`)));
+  const failedCases = results.filter((result) => !result.passed).length;
+  if (fp > 0 || fn > 0 || failedCases > 0) {
+    console.error(pc.bold(pc.red(`\nFAILED: ${fp} false blocker(s), ${fn} missed bug(s), ${failedCases} expectation/error mismatch(es).`)));
     process.exitCode = 1;
   } else {
     console.log(pc.bold(pc.green(`\nPASSED: Known False Blockers: 0! Precision: ${precision}%, Recall: ${recall}%.`)));

@@ -39,12 +39,15 @@ const SECRET_REPLACEMENT_PATTERNS: { pattern: RegExp; replace: (match: string) =
 /**
  * Redacts known sensitive secrets from a string.
  */
-export function redactSecrets(text: string): string {
+export function redactSecrets(text: string, sensitiveValues: string[] = []): string {
   if (!text || typeof text !== 'string') return text;
 
   let redacted = text;
   for (const item of SECRET_REPLACEMENT_PATTERNS) {
     redacted = redacted.replace(item.pattern, item.replace as any);
+  }
+  for (const value of sensitiveValues) {
+    if (value.length >= 4) redacted = redacted.split(value).join('[REDACTED_EXPLICIT_VALUE]');
   }
   return redacted;
 }
@@ -52,21 +55,21 @@ export function redactSecrets(text: string): string {
 /**
  * Deeply traverses an object or array and redacts all string values.
  */
-export function redactObject<T>(target: T): T {
+export function redactObject<T>(target: T, sensitiveValues: string[] = []): T {
   if (target === null || target === undefined) return target;
 
   if (typeof target === 'string') {
-    return redactSecrets(target) as unknown as T;
+    return redactSecrets(target, sensitiveValues) as unknown as T;
   }
 
   if (Array.isArray(target)) {
-    return target.map((item) => redactObject(item)) as unknown as T;
+    return target.map((item) => redactObject(item, sensitiveValues)) as unknown as T;
   }
 
   if (typeof target === 'object') {
     const copy: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(target)) {
-      copy[key] = redactObject(value);
+      copy[key] = redactObject(value, sensitiveValues);
     }
     return copy as T;
   }

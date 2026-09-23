@@ -11,16 +11,17 @@ const program = new Command();
 program
   .name('releaseproof')
   .description('Production-readiness verification engine for vibe-coders and AI agents.')
-  .version('0.1.0')
+  .version('0.2.0-dev.0')
   .argument('[path]', 'Project directory to verify', '.')
   .option('--ci', 'Run in deterministic CI mode with exit codes')
   .option('--json', 'Output results as JSON')
   .option('--verbose', 'Show detailed output and stream logs')
   .option('--timeout <ms>', 'Server startup timeout in milliseconds')
   .option('--port <port>', 'Port to verify')
+  .option('--python-interpreter <path>', 'Python interpreter used to create the verification venv')
   .option('--skip-sandbox', 'Run checks in place without copying to temporary clean-room')
-  .action((targetPath, options) => {
-    handleVerify(targetPath, options);
+  .action(async (targetPath, _options, _command) => {
+    await handleVerify(targetPath, _command.optsWithGlobals());
   });
 
 program
@@ -32,9 +33,10 @@ program
   .option('--verbose', 'Show detailed output and stream logs')
   .option('--timeout <ms>', 'Server startup timeout in milliseconds')
   .option('--port <port>', 'Port to verify')
+  .option('--python-interpreter <path>', 'Python interpreter used to create the verification venv')
   .option('--skip-sandbox', 'Run checks in place without copying to temporary clean-room')
-  .action((targetPath, options) => {
-    handleVerify(targetPath, options);
+  .action(async (targetPath, _options, _command) => {
+    await handleVerify(targetPath, _command.optsWithGlobals());
   });
 
 program
@@ -69,4 +71,4 @@ program
     handleClean(targetPath);
   });
 
-program.parse(process.argv);
+await program.parseAsync(process.argv);
