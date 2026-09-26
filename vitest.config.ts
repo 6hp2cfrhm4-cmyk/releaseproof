@@ -6,6 +6,6 @@ export default defineConfig({
     environment: 'node',
     testTimeout: 30000,
     include: ['**/*.test.ts', '**/*.spec.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/fixtures/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/fixtures/**', '**/.temp/**'],
   },
 });

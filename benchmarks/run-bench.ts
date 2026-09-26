@@ -21,7 +21,7 @@ interface FixtureExpected {
 
 interface BenchResult {
   name: string;
-  verdict: 'READY' | 'NOT_READY' | 'INCOMPLETE';
+  verdict: 'READY' | 'NOT_READY' | 'INCOMPLETE' | 'CANCELLED';
   expectedVerdict: 'READY' | 'NOT_READY' | 'INCOMPLETE';
   blockers: number;
   warnings: number;
@@ -98,6 +98,10 @@ export async function runBenchmark(): Promise<void> {
 
       const durationMs = Date.now() - start;
       totalDuration += durationMs;
+
+      if (report.runStatus !== 'completed') {
+        throw new Error(`Fixture verification ended with run status ${report.runStatus}.`);
+      }
 
       // Calculate precision / recall metrics
       const isFalseBlocker = expected.expectedVerdict !== 'NOT_READY' && report.verdict === 'NOT_READY';

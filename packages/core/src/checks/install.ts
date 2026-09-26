@@ -8,15 +8,32 @@ const MISSING_NATIVE_TOOLCHAIN_PATTERNS = [
   /(?:CMake|ninja).*(?:not found|is required|could not be found)/i,
 ];
 
+const INCOMPATIBLE_PACKAGE_MANAGER_PATTERNS = [
+  /ERR_PNPM_BROKEN_LOCKFILE[\s\S]{0,500}lockfileVersion[\s\S]{0,200}incompatible with the supported formats/i,
+];
+
 export function isMissingNativeToolchain(output: string): boolean {
   return MISSING_NATIVE_TOOLCHAIN_PATTERNS.some((pattern) => pattern.test(output));
+}
+
+export function isIncompatiblePackageManager(output: string): boolean {
+  return INCOMPATIBLE_PACKAGE_MANAGER_PATTERNS.some((pattern) => pattern.test(output));
+}
+
+export function isPackageManagerPolicyUnavailable(output: string): boolean {
+  return /ERR_PNPM_IGNORED_BUILDS[\s\S]{0,500}Ignored build scripts:/i.test(output);
+}
+
+export function isUnsupportedVerificationPlatform(output: string): boolean {
+  return /RuntimeError:\s*uvloop does not support Windows at the moment/i.test(output);
 }
 
 export async function runInstallCheck(
   workspaceDir: string,
   installCommand?: string,
   environment: Record<string, string | undefined> = {},
-  allowHostEnv: string[] = []
+  allowHostEnv: string[] = [],
+  signal?: AbortSignal
 ): Promise<CheckResult> {
   if (!installCommand) {
     return {
@@ -35,7 +52,14 @@ export async function runInstallCheck(
     timeoutMs: 180000,
     env: environment,
     allowHostEnv,
+    signal,
   });
+
+  if (result.aborted) {
+    const cancelled = new Error('Dependency installation was cancelled.');
+    cancelled.name = 'AbortError';
+    throw cancelled;
+  }
 
   const evidence: CommandEvidence = {
     type: 'command',
@@ -77,6 +101,45 @@ export async function runInstallCheck(
   }
 
   const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  if (isIncompatiblePackageManager(combinedOutput)) {
+    return {
+      id: 'install-check',
+      title: 'Package manager cannot read the project lockfile',
+      category: 'install',
+      status: 'unknown',
+      severity: 'medium',
+      summary: `The available package manager could not parse this project's lockfile format, so installation was not verified.`,
+      evidence: [evidence],
+      remediation: 'Run verification with a package-manager version compatible with the committed lockfile.',
+      classification: 'VERIFICATION_UNAVAILABLE',
+    };
+  }
+  if (isPackageManagerPolicyUnavailable(combinedOutput)) {
+    return {
+      id: 'install-check',
+      title: 'Package manager policy prevented dependency verification',
+      category: 'install',
+      status: 'unknown',
+      severity: 'medium',
+      summary: 'The available package manager refused dependency build scripts required for installation.',
+      evidence: [evidence],
+      remediation: 'Use a reviewed dependency build allowlist or a compatible package-manager policy, then retry.',
+      classification: 'VERIFICATION_UNAVAILABLE',
+    };
+  }
+  if (isUnsupportedVerificationPlatform(combinedOutput)) {
+    return {
+      id: 'install-check',
+      title: 'Dependency does not support this verification platform',
+      category: 'install',
+      status: 'unknown',
+      severity: 'medium',
+      summary: 'A required dependency cannot be installed on this operating system, so application readiness could not be verified here.',
+      evidence: [evidence],
+      remediation: 'Run verification on a supported operating system for the pinned dependency.',
+      classification: 'VERIFICATION_UNAVAILABLE',
+    };
+  }
   if (isMissingNativeToolchain(combinedOutput)) {
     return {
       id: 'install-check',

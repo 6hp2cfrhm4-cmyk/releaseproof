@@ -290,15 +290,15 @@ export function generateHtmlReport(report: VerificationReport): string {
       </div>
     </header>
 
-    <div class="verdict-banner ${report.verdict === 'READY' ? 'ready' : report.verdict === 'INCOMPLETE' ? 'incomplete' : 'not-ready'}">
+    <div class="verdict-banner ${report.verdict === 'READY' ? 'ready' : report.verdict === 'INCOMPLETE' ? 'incomplete' : report.verdict === 'CANCELLED' ? 'incomplete' : 'not-ready'}">
       <div>
-        <div class="verdict-title">${report.verdict === 'READY' ? 'READY TO SHIP' : report.verdict === 'INCOMPLETE' ? 'VERIFICATION INCOMPLETE' : 'NOT READY TO SHIP'}</div>
+        <div class="verdict-title">${report.verdict === 'READY' ? 'READY TO SHIP' : report.verdict === 'INCOMPLETE' ? 'VERIFICATION INCOMPLETE' : report.verdict === 'CANCELLED' ? 'VERIFICATION CANCELLED' : 'NOT READY TO SHIP'}</div>
         <div class="verdict-subtitle">
-          ${report.counts.blockers} Blocker(s) &bull; ${report.counts.warnings} Warning(s) &bull; ${report.counts.unknown || 0} Incomplete Check(s) &bull; ${report.counts.passed} Passed
+          ${report.runStatus === 'cancelled' ? 'No shipping verdict was produced.' : `${report.counts.blockers} Blocker(s) &bull; ${report.counts.warnings} Warning(s) &bull; ${report.counts.unknown || 0} Incomplete Check(s) &bull; ${report.counts.passed} Passed`} &bull; ${Math.round(report.evidenceCoverage * 100)}% evidence coverage
         </div>
       </div>
       <div>
-        <div class="score-badge" style="color: ${report.verdict === 'READY' ? 'var(--green)' : report.verdict === 'INCOMPLETE' ? 'var(--yellow)' : 'var(--red)'}">${report.score}</div>
+        <div class="score-badge" style="color: ${report.verdict === 'READY' ? 'var(--green)' : report.verdict === 'INCOMPLETE' || report.verdict === 'CANCELLED' ? 'var(--yellow)' : 'var(--red)'}">${report.score}</div>
         <div class="score-label">Release Score / 100</div>
       </div>
     </div>

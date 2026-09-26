@@ -5,6 +5,7 @@ node_modules/
 # Production builds and outputs
 dist/
 build/
+apps/desktop/release/
 *.tsbuildinfo
 *.tgz
 
@@ -48,4 +49,3 @@ Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
-

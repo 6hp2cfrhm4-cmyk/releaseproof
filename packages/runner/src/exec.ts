@@ -12,12 +12,18 @@ export interface CommandOptions {
   onStdout?: (data: string) => void;
   onStderr?: (data: string) => void;
   shell?: boolean | string;
+  signal?: AbortSignal;
 }
 
 const BASE_HOST_ENV = [
   'PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC',
   'TEMP', 'TMP', 'HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA',
 ];
+
+function appendBounded(current: string, next: string, limit: number): string {
+  if (current.length >= limit) return current;
+  return current + next.slice(0, limit - current.length);
+}
 
 /** Builds the deliberately small host environment exposed to verified code. */
 export function buildVerificationEnv(
@@ -44,6 +50,7 @@ export interface CommandResult {
   durationMs: number;
   timedOut: boolean;
   killed: boolean;
+  aborted: boolean;
 }
 
 /**
@@ -99,6 +106,10 @@ export function execCommand(
 ): Promise<CommandResult> {
   return new Promise((resolve) => {
     const startTime = Date.now();
+    if (options.signal?.aborted) {
+      resolve({ command, exitCode: null, stdout: '', stderr: '', durationMs: 0, timedOut: false, killed: false, aborted: true });
+      return;
+    }
     const maxBuffer = options.maxBufferBytes ?? 5 * 1024 * 1024; // 5MB cap
     const timeoutMs = options.timeoutMs ?? 120000;
 
@@ -106,6 +117,7 @@ export function execCommand(
     let stderr = '';
     let timedOut = false;
     let killed = false;
+    let aborted = false;
     let timer: NodeJS.Timeout | null = null;
 
     let child: ChildProcess;
@@ -120,6 +132,7 @@ export function execCommand(
         durationMs: 0,
         timedOut: false,
         killed: false,
+        aborted: false,
       });
     }
 
@@ -135,22 +148,21 @@ export function execCommand(
 
     child.stdout?.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
-      if (stdout.length < maxBuffer) {
-        stdout += text;
-      }
-      options.onStdout?.(text);
+      const captured = text.slice(0, Math.max(0, maxBuffer - stdout.length));
+      stdout = appendBounded(stdout, text, maxBuffer);
+      if (captured) options.onStdout?.(captured);
     });
 
     child.stderr?.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
-      if (stderr.length < maxBuffer) {
-        stderr += text;
-      }
-      options.onStderr?.(text);
+      const captured = text.slice(0, Math.max(0, maxBuffer - stderr.length));
+      stderr = appendBounded(stderr, text, maxBuffer);
+      if (captured) options.onStderr?.(captured);
     });
 
     const finish = (exitCode: number | null) => {
       if (timer) clearTimeout(timer);
+      options.signal?.removeEventListener('abort', onAbort);
       const durationMs = Date.now() - startTime;
       resolve({
         command,
@@ -160,8 +172,16 @@ export function execCommand(
         durationMs,
         timedOut,
         killed,
+        aborted,
       });
     };
+
+    const onAbort = () => {
+      aborted = true;
+      killed = true;
+      if (child.pid) void killProcessTree(child.pid);
+    };
+    options.signal?.addEventListener('abort', onAbort, { once: true });
 
     child.on('error', (err) => {
       stderr += `\nProcess error: ${err.message}`;
@@ -185,6 +205,10 @@ export function execFileArgs(
   const cmdString = [executable, ...args].join(' ');
   return new Promise((resolve) => {
     const startTime = Date.now();
+    if (options.signal?.aborted) {
+      resolve({ command: cmdString, exitCode: null, stdout: '', stderr: '', durationMs: 0, timedOut: false, killed: false, aborted: true });
+      return;
+    }
     const maxBuffer = options.maxBufferBytes ?? 5 * 1024 * 1024;
     const timeoutMs = options.timeoutMs ?? 120000;
 
@@ -192,15 +216,18 @@ export function execFileArgs(
     let stderr = '';
     let timedOut = false;
     let killed = false;
+    let aborted = false;
     let timer: NodeJS.Timeout | null = null;
 
     const mergedEnv = buildVerificationEnv(options.env, options.allowHostEnv);
 
     const { binary } = resolveBinaryForPlatform(executable);
+    const detached = process.platform !== 'win32';
     const child = spawn(binary, args, {
       cwd: options.cwd || process.cwd(),
       env: mergedEnv,
       shell: false,
+      detached,
       windowsHide: true,
     });
 
@@ -216,22 +243,22 @@ export function execFileArgs(
 
     child.stdout?.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
-      if (stdout.length < maxBuffer) {
-        stdout += text;
-      }
-      options.onStdout?.(text);
+      const captured = text.slice(0, Math.max(0, maxBuffer - stdout.length));
+      stdout = appendBounded(stdout, text, maxBuffer);
+      if (captured) options.onStdout?.(captured);
     });
 
     child.stderr?.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
-      if (stderr.length < maxBuffer) {
-        stderr += text;
-      }
-      options.onStderr?.(text);
+      const captured = text.slice(0, Math.max(0, maxBuffer - stderr.length));
+      stderr = appendBounded(stderr, text, maxBuffer);
+      if (captured) options.onStderr?.(captured);
     });
 
     const finish = (exitCode: number | null) => {
       if (timer) clearTimeout(timer);
+      options.signal?.removeEventListener('abort', onAbort);
+      options.signal?.removeEventListener('abort', onAbort);
       const durationMs = Date.now() - startTime;
       resolve({
         command: cmdString,
@@ -241,8 +268,16 @@ export function execFileArgs(
         durationMs,
         timedOut,
         killed,
+        aborted,
       });
     };
+
+    const onAbort = () => {
+      aborted = true;
+      killed = true;
+      if (child.pid) void killProcessTree(child.pid);
+    };
+    options.signal?.addEventListener('abort', onAbort, { once: true });
 
     child.on('error', (err) => {
       stderr += `\nProcess error: ${err.message}`;
@@ -262,6 +297,7 @@ export interface RunningService {
   isAlive: () => boolean;
   kill: () => Promise<void>;
   waitForPort: (port: number, timeoutMs?: number) => Promise<boolean>;
+  aborted: () => boolean;
 }
 
 /**
@@ -271,9 +307,15 @@ export function spawnService(
   command: string,
   options: CommandOptions = {}
 ): RunningService {
+  if (options.signal?.aborted) {
+    const error = new Error('Operation cancelled before process startup.');
+    error.name = 'AbortError';
+    throw error;
+  }
   let stdout = '';
   let stderr = '';
   let exited = false;
+  let aborted = false;
   const maxBuffer = options.maxBufferBytes ?? 5 * 1024 * 1024;
 
   const child = spawnSecure(command, {
@@ -287,18 +329,16 @@ export function spawnService(
 
   child.stdout?.on('data', (chunk: Buffer) => {
     const text = chunk.toString();
-    if (stdout.length < maxBuffer) {
-      stdout += text;
-    }
-    options.onStdout?.(text);
+    const captured = text.slice(0, Math.max(0, maxBuffer - stdout.length));
+    stdout = appendBounded(stdout, text, maxBuffer);
+    if (captured) options.onStdout?.(captured);
   });
 
   child.stderr?.on('data', (chunk: Buffer) => {
     const text = chunk.toString();
-    if (stderr.length < maxBuffer) {
-      stderr += text;
-    }
-    options.onStderr?.(text);
+    const captured = text.slice(0, Math.max(0, maxBuffer - stderr.length));
+    stderr = appendBounded(stderr, text, maxBuffer);
+    if (captured) options.onStderr?.(captured);
   });
 
   child.on('exit', () => {
@@ -310,11 +350,19 @@ export function spawnService(
     exited = true;
   });
 
+  const onAbort = () => {
+    aborted = true;
+    if (child.pid) void killProcessTree(child.pid);
+  };
+  options.signal?.addEventListener('abort', onAbort, { once: true });
+  child.once('close', () => options.signal?.removeEventListener('abort', onAbort));
+
   return {
     pid: child.pid,
     process: child,
     getLogs: () => ({ stdout, stderr }),
     isAlive: () => !exited && child.exitCode === null,
+    aborted: () => aborted,
     kill: async () => {
       if (child.pid) {
         await killProcessTree(child.pid);
@@ -322,7 +370,7 @@ export function spawnService(
       exited = true;
     },
     waitForPort: async (port: number, timeoutMs = 30000) => {
-      return waitForPort(port, { timeoutMs });
+      return waitForPort(port, { timeoutMs, abortSignal: options.signal });
     },
   };
 }

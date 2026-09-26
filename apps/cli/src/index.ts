@@ -19,6 +19,9 @@ program
   .option('--timeout <ms>', 'Server startup timeout in milliseconds')
   .option('--port <port>', 'Port to verify')
   .option('--python-interpreter <path>', 'Python interpreter used to create the verification venv')
+  .option('--target <relative-path>', 'Runnable target inside a monorepo')
+  .option('--no-browser', 'Skip browser verification explicitly')
+  .option('--in-place', 'Development-only alias for --skip-sandbox')
   .option('--skip-sandbox', 'Run checks in place without copying to temporary clean-room')
   .action(async (targetPath, _options, _command) => {
     await handleVerify(targetPath, _command.optsWithGlobals());
@@ -34,6 +37,9 @@ program
   .option('--timeout <ms>', 'Server startup timeout in milliseconds')
   .option('--port <port>', 'Port to verify')
   .option('--python-interpreter <path>', 'Python interpreter used to create the verification venv')
+  .option('--target <relative-path>', 'Runnable target inside a monorepo')
+  .option('--no-browser', 'Skip browser verification explicitly')
+  .option('--in-place', 'Development-only alias for --skip-sandbox')
   .option('--skip-sandbox', 'Run checks in place without copying to temporary clean-room')
   .action(async (targetPath, _options, _command) => {
     await handleVerify(targetPath, _command.optsWithGlobals());
@@ -59,8 +65,10 @@ program
 program
   .command('doctor')
   .description('Inspect environment dependencies and tools')
-  .action(() => {
-    handleDoctor();
+  .argument('[path]', 'Project directory', '.')
+  .option('--json', 'Output machine-readable capability results')
+  .action((targetPath, options) => {
+    handleDoctor(targetPath, options);
   });
 
 program

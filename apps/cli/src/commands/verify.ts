@@ -16,6 +16,9 @@ export interface VerifyCommandOptions {
   port?: string;
   pythonInterpreter?: string;
   skipSandbox?: boolean;
+  inPlace?: boolean;
+  target?: string;
+  browser?: boolean;
 }
 
 export async function handleVerify(
@@ -43,9 +46,15 @@ export async function handleVerify(
     ...(options.verbose !== undefined ? { verbose: options.verbose } : {}),
     ...(Object.keys(startConfig).length > 0 ? { start: startConfig } : {}),
     ...(options.pythonInterpreter ? { python: { interpreter: path.resolve(options.pythonInterpreter) } } : {}),
+    ...(options.target ? { target: options.target } : {}),
+    ...(options.browser === false ? { checks: { browser: false }, browser: { enabled: false } } : {}),
   };
 
   let currentStep = '';
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  process.once('SIGINT', cancel);
+  process.once('SIGTERM', cancel);
   try {
     if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535)) {
       throw new Error(`Invalid --port value: ${options.port}`);
@@ -55,8 +64,9 @@ export async function handleVerify(
     }
     const report = await verifyProject({
       projectDir,
-      skipSandbox: options.skipSandbox,
+      skipSandbox: options.inPlace || options.skipSandbox,
       config: cliConfig,
+      signal: controller.signal,
       onProgress: (step, status, detail) => {
         if (options.json) return;
         if (status === 'running') {
@@ -73,15 +83,17 @@ export async function handleVerify(
     // Write HTML report
     if (report.htmlReportPath) {
       const html = generateHtmlReport(report);
-      const absHtml = path.resolve(process.cwd(), report.htmlReportPath);
-      await fs.writeFile(absHtml, html, 'utf-8');
+      // Artifacts are always owned by the selected project, regardless of
+      // the caller's current working directory.
+      const absHtml = path.join(projectDir, '.releaseproof', 'report.html');
+      await writeAtomic(absHtml, html);
     }
 
     // Write AI Fix Prompt
     if (report.fixPromptPath) {
       const prompt = generateAiHandoffMarkdown(report);
-      const absFix = path.resolve(process.cwd(), report.fixPromptPath);
-      await fs.writeFile(absFix, prompt, 'utf-8');
+      const absFix = path.join(projectDir, '.releaseproof', 'RELEASEPROOF_FIX.md');
+      await writeAtomic(absFix, prompt);
     }
 
     if (options.json) {
@@ -91,7 +103,9 @@ export async function handleVerify(
     }
 
     const internalError = report.checks.some((check) => check.classification === 'RELEASEPROOF_INTERNAL_ERROR');
-    if (internalError) {
+    if (report.runStatus === 'cancelled' || report.verdict === 'CANCELLED') {
+      process.exitCode = 130;
+    } else if (internalError || report.runStatus === 'internal_error') {
       process.exitCode = 3;
     } else if (report.verdict === 'NOT_READY') {
       process.exitCode = 1;
@@ -109,5 +123,19 @@ export async function handleVerify(
       console.error(pc.red(err instanceof Error ? err.stack || err.message : String(err)));
     }
     process.exitCode = 3;
+  } finally {
+    process.off('SIGINT', cancel);
+    process.off('SIGTERM', cancel);
+  }
+}
+
+async function writeAtomic(target: string, content: string): Promise<void> {
+  const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
+  await fs.writeFile(temporary, content, 'utf8');
+  try {
+    await fs.rename(temporary, target);
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {});
+    throw error;
   }
 }

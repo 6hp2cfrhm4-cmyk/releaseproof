@@ -5,7 +5,7 @@ import {
   checkHealthEndpoint,
   isPortListening,
 } from '@releaseproof/runner';
-import { detectExternalServiceDependency } from './external-services.js';
+import { detectExternalServiceDependency, detectMissingRequiredEnvironment } from './external-services.js';
 
 export interface StartupCheckResult {
   checkResult: CheckResult;
@@ -21,7 +21,8 @@ export async function runStartupCheck(
   healthPath = '/',
   stabilityWindowMs = 5000,
   environment: Record<string, string | undefined> = {},
-  allowHostEnv: string[] = []
+  allowHostEnv: string[] = [],
+  signal?: AbortSignal
 ): Promise<StartupCheckResult> {
   if (!startCommand) {
     return {
@@ -58,9 +59,17 @@ export async function runStartupCheck(
     cwd: workspaceDir,
     env: { ...environment, PORT: String(port) },
     allowHostEnv,
+    signal,
   });
 
   const isReady = await service.waitForPort(port, timeoutMs);
+
+  if (signal?.aborted || service.aborted()) {
+    await service.kill();
+    const cancelled = new Error('Application startup verification was cancelled.');
+    cancelled.name = 'AbortError';
+    throw cancelled;
+  }
 
   if (!isReady) {
     const logs = service.getLogs();
@@ -78,6 +87,21 @@ export async function runStartupCheck(
     };
 
     const combinedLogs = `${logs.stdout}\n${logs.stderr}`;
+    if (detectMissingRequiredEnvironment(combinedLogs)) {
+      return {
+        checkResult: {
+          id: 'startup-check',
+          title: 'Required application environment was unavailable during startup',
+          category: 'runtime',
+          status: 'unknown',
+          severity: 'medium',
+          summary: 'The application rejected missing required environment values, so runtime startup could not be verified.',
+          evidence: [evidence],
+          remediation: 'Provide disposable verification values for the required variables and retry.',
+          classification: 'VERIFICATION_UNAVAILABLE',
+        },
+      };
+    }
     const extDep = detectExternalServiceDependency(combinedLogs);
 
     if (extDep) {
@@ -142,6 +166,23 @@ export async function runStartupCheck(
 
   if (!health.ok && health.status >= 500) {
     const combinedOutput = `${logs.stdout}\n${logs.stderr}\n${health.body}`;
+    if (detectMissingRequiredEnvironment(combinedOutput)) {
+      return {
+        service,
+        port,
+        checkResult: {
+          id: 'startup-check',
+          title: 'Required application environment was unavailable during startup',
+          category: 'runtime',
+          status: 'unknown',
+          severity: 'medium',
+          summary: `Root route returned HTTP ${health.status} while required project environment values were missing.`,
+          evidence: [procEvidence, httpEvidence],
+          remediation: 'Provide disposable verification values for the required variables and retry.',
+          classification: 'VERIFICATION_UNAVAILABLE',
+        },
+      };
+    }
     const extDep = detectExternalServiceDependency(combinedOutput);
 
     if (extDep) {
@@ -189,6 +230,12 @@ export async function runStartupCheck(
   let lastHealth = health;
   while (Date.now() - stabilityStarted < stabilityWindowMs) {
     await new Promise((resolve) => setTimeout(resolve, Math.min(500, Math.max(50, stabilityWindowMs))));
+    if (signal?.aborted || service.aborted()) {
+      await service.kill();
+      const cancelled = new Error('Application stability verification was cancelled.');
+      cancelled.name = 'AbortError';
+      throw cancelled;
+    }
     if (!service.isAlive()) {
       const crashedLogs = service.getLogs();
       await service.kill();
@@ -208,6 +255,40 @@ export async function runStartupCheck(
     }
     lastHealth = await checkHealthEndpoint(healthUrl, Math.min(2000, Math.max(250, timeoutMs)));
     if (!lastHealth.ok && (lastHealth.status === 0 || lastHealth.status >= 500)) {
+      const unstableLogs = service.getLogs();
+      const extDep = detectExternalServiceDependency(`${unstableLogs.stdout}\n${unstableLogs.stderr}\n${lastHealth.body}`);
+      if (extDep) {
+        await service.kill();
+        return {
+          checkResult: {
+            id: 'startup-stability',
+            title: `Verification incomplete: ${extDep.name} required during stability observation`,
+            category: 'runtime',
+            status: 'unknown',
+            severity: 'medium',
+            classification: 'EXTERNAL_DEPENDENCY_UNAVAILABLE',
+            summary: `${extDep.reason} Runtime health could not be confirmed during the stability window.`,
+            evidence: [procEvidence, { ...httpEvidence, statusCode: lastHealth.status, responsePreview: lastHealth.body.slice(0, 300) }],
+            remediation: extDep.remediation,
+          },
+        };
+      }
+      if (lastHealth.status === 0 && /timed out/i.test(lastHealth.body) && service.isAlive()) {
+        await service.kill();
+        return {
+          checkResult: {
+            id: 'startup-stability',
+            title: 'Runtime health timed out during stability observation',
+            category: 'runtime',
+            status: 'unknown',
+            severity: 'medium',
+            classification: 'VERIFICATION_UNAVAILABLE',
+            summary: `The live process stopped answering HTTP within the ${stabilityWindowMs}ms stability window; the cause could not be determined from available evidence.`,
+            evidence: [procEvidence, { ...httpEvidence, statusCode: lastHealth.status, responsePreview: lastHealth.body.slice(0, 300) }],
+            remediation: 'Inspect application logs and external service availability, then retry verification.',
+          },
+        };
+      }
       await service.kill();
       return {
         checkResult: {

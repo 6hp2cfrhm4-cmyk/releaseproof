@@ -24,6 +24,7 @@ export interface BrowserVerificationOptions {
   observationWindowMs?: number;
   requiresBrowserRuntime?: boolean;
   forceHttpFallback?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface BrowserVerificationResult {

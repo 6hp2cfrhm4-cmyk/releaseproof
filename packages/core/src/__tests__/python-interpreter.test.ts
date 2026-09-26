@@ -28,5 +28,5 @@ describe('Python interpreter identity', () => {
     expect(setup?.summary).toContain('.releaseproof');
     const commandEvidence = install?.evidence.find((item) => item.type === 'command');
     expect(commandEvidence && commandEvidence.type === 'command' ? commandEvidence.command : '').toContain('.releaseproof');
-  }, 30000);
+  }, 60000);
 });

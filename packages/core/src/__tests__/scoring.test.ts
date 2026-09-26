@@ -100,4 +100,41 @@ describe('scoring engine', () => {
     expect(result.categoryScores.browser.status).toBe('not_applicable');
     expect(result.counts.notApplicable).toBe(1);
   });
+
+  it('gives unknown and skipped checks zero credit and reports evidence coverage separately', () => {
+    const result = computeScore([
+      { id: 'pass', title: 'Startup', category: 'runtime', status: 'pass', severity: 'info', summary: 'ok', evidence: [] },
+      { id: 'unknown', title: 'Browser', category: 'browser', status: 'unknown', severity: 'medium', summary: 'unavailable', evidence: [] },
+      { id: 'skipped', title: 'Build', category: 'build', status: 'skipped', severity: 'info', summary: 'not run', evidence: [] },
+    ]);
+
+    expect(result.categoryScores.browser.score).toBe(0);
+    expect(result.categoryScores.build.score).toBe(0);
+    expect(result.evidenceCoverage).toBeCloseTo(1 / 3);
+    expect(result.verdict).toBe('INCOMPLETE');
+  });
+
+  it('averages warnings and passes within a category while a blocker remains decisive', () => {
+    const result = computeScore([
+      { id: 'pass-1', title: 'Pass', category: 'runtime', status: 'pass', severity: 'info', summary: 'ok', evidence: [] },
+      { id: 'warn-1', title: 'Warn', category: 'runtime', status: 'warn', severity: 'medium', summary: 'concern', evidence: [] },
+      { id: 'block', title: 'Block', category: 'build', status: 'block', severity: 'blocker', summary: 'failed', evidence: [] },
+    ]);
+
+    expect(result.categoryScores.runtime.score).toBe(15);
+    expect(result.categoryScores.runtime.max).toBe(20);
+    expect(result.verdict).toBe('NOT_READY');
+  });
+
+  it('keeps per-check score credit distinct from category status precedence', () => {
+    const result = computeScore([
+      { id: 'observed', title: 'Observed', category: 'environment', status: 'pass', severity: 'info', summary: 'ok', evidence: [] },
+      { id: 'unavailable', title: 'Unavailable', category: 'environment', status: 'unknown', severity: 'medium', summary: 'unknown', evidence: [] },
+    ]);
+
+    expect(result.categoryScores.environment.status).toBe('unknown');
+    expect(result.categoryScores.environment.score).toBe(5);
+    expect(result.evidenceCoverage).toBe(0.5);
+    expect(result.verdict).toBe('INCOMPLETE');
+  });
 });

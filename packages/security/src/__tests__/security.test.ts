@@ -48,4 +48,15 @@ describe('security scanner', () => {
     expect(cleanCheck).toBeDefined();
     expect(cleanCheck?.status).toBe('pass');
   });
+
+  it('warns on populated env keys without a recognized credential instead of blocking a sample project', async () => {
+    await fs.mkdir(testRoot, { recursive: true });
+    await fs.writeFile(path.join(testRoot, '.env'), 'DATABASE_URL=postgres://sample:sample@localhost:5432/demo\nCLERK_SECRET_KEY=sk_test_example_value\n');
+    await fs.writeFile(path.join(testRoot, '.env.production'), 'NEXT_PUBLIC_APP_URL=https://example.org\n');
+
+    const checks = await scanForSecrets(testRoot);
+    expect(checks.some((check) => check.status === 'block')).toBe(false);
+    expect(checks.find((check) => check.id === 'sec-env-file-review')?.status).toBe('warn');
+    expect(JSON.stringify(checks)).not.toContain('sample:sample');
+  });
 });

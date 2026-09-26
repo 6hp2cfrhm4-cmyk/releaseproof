@@ -61,9 +61,12 @@ export interface DetectedSecretFinding {
 export async function scanForSecrets(projectDir: string, ignoreDirs: string[] = []): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
   const findings: DetectedSecretFinding[] = [];
+  const envFilesNeedingReview: string[] = [];
   const customIgnore = new Set(ignoreDirs);
 
-  // 1. Check for committed / unignored .env files containing non-empty keys
+  // 1. Flag potentially sensitive env assignments for review. The mere presence
+  // of a populated .env file is not proof of a leaked credential: example
+  // projects commonly include public URLs and test-only placeholders.
   const dotEnvFiles = ['.env', '.env.local', '.env.production'];
   for (const envFile of dotEnvFiles) {
     if (customIgnore.has(envFile)) continue;
@@ -72,20 +75,16 @@ export async function scanForSecrets(projectDir: string, ignoreDirs: string[] = 
       const stat = await fs.stat(fullPath);
       if (stat.isFile()) {
         const content = await fs.readFile(fullPath, 'utf-8');
-        // Check if has actual populated values, not just placeholders
-        const hasPopulatedSecrets = content
-          .split('\n')
-          .some((l) => /^[a-zA-Z_0-9]+=[^\s"'#]{8,}/.test(l.trim()));
-
-        if (hasPopulatedSecrets) {
-          findings.push({
-            ruleId: 'sec-committed-env',
-            ruleName: 'Committed .env File',
-            file: envFile,
-            line: 1,
-            maskedSnippet: `${envFile} contains populated credentials and should not be in repository.`,
-          });
-        }
+        const hasSensitiveAssignment = content.split('\n').some((line) => {
+          const match = /^\s*([A-Za-z_][A-Za-z_0-9]*)\s*=\s*(.*?)\s*$/.exec(line);
+          if (!match) return false;
+          const key = match[1];
+          const value = match[2].replace(/^['"]|['"]$/g, '').trim();
+          if (!value || /^(?:<.*>|\$\{.*\}|your[-_].*|change[-_]?me|placeholder|example|dummy|x{4,})$/i.test(value)) return false;
+          if (/^(?:NEXT_PUBLIC_|VITE_)/i.test(key)) return false;
+          return /(?:SECRET|TOKEN|PASSWORD|DATABASE_URL|PRIVATE|API_KEY|CREDENTIAL)/i.test(key);
+        });
+        if (hasSensitiveAssignment) envFilesNeedingReview.push(envFile);
       }
     } catch {}
   }
@@ -140,6 +139,22 @@ export async function scanForSecrets(projectDir: string, ignoreDirs: string[] = 
       summary: `Detected ${findings.length} secret(s) or exposed credential(s) in project files.`,
       evidence,
       remediation: 'Remove the hard-coded secrets immediately, revoke compromised credentials, and use environment variables.',
+    });
+  } else if (envFilesNeedingReview.length > 0) {
+    results.push({
+      id: 'sec-env-file-review',
+      title: 'Environment file needs credential review',
+      category: 'security',
+      status: 'warn',
+      severity: 'medium',
+      summary: `${envFilesNeedingReview.length} environment file(s) contain populated sensitive variable names; no recognized credential value was found.`,
+      evidence: envFilesNeedingReview.map((envFile) => ({
+        type: 'filesystem',
+        path: envFile,
+        exists: true,
+        contentPreview: 'Values omitted. Review whether this file contains production credentials.',
+      })),
+      remediation: 'Review these env files and keep live credentials outside the repository.',
     });
   } else {
     results.push({

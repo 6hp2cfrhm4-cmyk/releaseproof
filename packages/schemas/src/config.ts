@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const ReleaseProofConfigSchema = z.object({
+  target: z.string().min(1).optional(),
   ignoreDirs: z.array(z.string()).default([]),
   build: z.object({
     command: z.string().optional(),

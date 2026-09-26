@@ -10,6 +10,7 @@ import { VerificationReport } from '@releaseproof/schemas';
 const mockReport: VerificationReport = {
   id: 'test-123',
   version: '0.1.0',
+  runStatus: 'completed',
   timestamp: new Date().toISOString(),
   projectName: 'test-app',
   projectPath: '/tmp/test-app',
@@ -28,6 +29,7 @@ const mockReport: VerificationReport = {
   },
   verdict: 'NOT_READY',
   score: 75,
+  evidenceCoverage: 1,
   categoryScores: {
     install: { max: 15, score: 15, status: 'pass' },
     build: { max: 15, score: 0, status: 'fail' },

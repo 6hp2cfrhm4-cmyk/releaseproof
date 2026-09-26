@@ -164,8 +164,6 @@ export async function analyzeFrameworks(
         confidence: 1.0,
       });
       hasApi = true;
-      ports.add(3000);
-
       commands.install = nodeInstallCommand();
       commands.dev = pkgJson.scripts?.dev ? `${runPrefix} dev` : undefined;
       commands.build = pkgJson.scripts?.build ? `${runPrefix} build` : undefined;
@@ -193,6 +191,22 @@ export async function analyzeFrameworks(
       const match = script.match(/(?:-p|--port|PORT=|listen\()\s*['"]?(\d+)['"]?/);
       if (match && match[1]) {
         ports.add(parseInt(match[1], 10));
+      }
+    }
+
+    // Common Express entrypoints declare a fallback port in source while their
+    // package script only says `node app.js`. Use that declared default instead
+    // of inventing port 3000, which also avoids a false README mismatch.
+    if (frameworks.some((framework) => framework.type === 'express') && ports.size === 0) {
+      for (const candidate of ['app.js', 'server.js', 'index.js', 'src/server.js', 'src/index.js']) {
+        try {
+          const source = await fs.readFile(path.join(projectDir, candidate), 'utf8');
+          const match = /process\.env\.PORT\s*\|\|\s*(?:process\.env\.[A-Z_][A-Z_0-9]*\s*\|\|\s*)?(\d{2,5})/i.exec(source);
+          if (match) {
+            ports.add(Number(match[1]));
+            break;
+          }
+        } catch {}
       }
     }
   }

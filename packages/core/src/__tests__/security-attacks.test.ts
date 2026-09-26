@@ -28,6 +28,7 @@ describe('security attack & hardening test suite', () => {
     const mockReport: VerificationReport = {
       id: 'attack-test',
       version: '0.1.0',
+      runStatus: 'completed',
       timestamp: new Date().toISOString(),
       projectName: maliciousPayload,
       projectPath: '/test/' + maliciousPayload,
@@ -46,6 +47,7 @@ describe('security attack & hardening test suite', () => {
       },
       verdict: 'NOT_READY',
       score: 50,
+      evidenceCoverage: 1,
       categoryScores: {
         install: { score: 15, max: 15, status: 'pass' },
         build: { score: 0, max: 15, status: 'fail' },

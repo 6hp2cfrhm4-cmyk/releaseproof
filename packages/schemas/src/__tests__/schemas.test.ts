@@ -102,5 +102,21 @@ describe('schemas', () => {
     });
 
     expect(report.verdict).toBe('NOT_READY');
+    expect(report.runStatus).toBe('completed');
+    expect(report.evidenceCoverage).toBe(0);
+  });
+
+  it('requires cancelled reports to have no shipping verdict and zero score', () => {
+    const report = VerificationReportSchema.parse({
+      id: 'cancelled-report', version: '0.2.0-dev.0', runStatus: 'cancelled',
+      timestamp: new Date().toISOString(), projectName: 'app', projectPath: '.',
+      profile: { root: '.', name: 'app' }, verdict: 'CANCELLED', score: 0,
+      categoryScores: {}, counts: { total: 0, passed: 0, warnings: 0, blockers: 0, unknown: 0, skipped: 0, notApplicable: 0 },
+      checks: [], durationMs: 10, artifactsDir: '.releaseproof',
+    });
+    expect(report.verdict).toBe('CANCELLED');
+    expect(report.runStatus).toBe('cancelled');
+
+    expect(() => VerificationReportSchema.parse({ ...report, verdict: 'READY' })).toThrow();
   });
 });

@@ -43,4 +43,23 @@ describe('startup ownership and stability hardening', () => {
     expect(result.checkResult.status).toBe('block');
     expect(result.checkResult.classification).toBe('APPLICATION_FAILURE');
   });
+
+  it('marks a live server with an unexplained delayed HTTP timeout as incomplete', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'rp-delayed-timeout-'));
+    roots.push(root);
+    const serverPath = path.join(root, 'server.cjs');
+    await fs.writeFile(serverPath, `let requests=0;require('node:http').createServer((_q,r)=>{requests++;if(requests===1)r.end('ok');}).listen(Number(process.env.PORT),'127.0.0.1');`);
+    const probe = http.createServer();
+    await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    const address = probe.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+
+    // Keep startup allowance comfortably above the stability window so a slow
+    // Windows/CI process launch cannot accidentally exercise the startup-timeout
+    // branch instead of the delayed HTTP timeout this test is intended to cover.
+    const result = await runStartupCheck(root, `node ${JSON.stringify(serverPath)}`, port, 5000, '/', 1000);
+    expect(result.checkResult.status).toBe('unknown');
+    expect(result.checkResult.classification).toBe('VERIFICATION_UNAVAILABLE');
+  }, 15000);
 });

@@ -32,6 +32,8 @@ export function formatTerminalReport(report: VerificationReport): string {
         '  ' +
         pc.bold(pc.yellow(`${report.score} / 100`))
     );
+  } else if (report.verdict === 'CANCELLED') {
+    lines.push(pc.bold(pc.bgBlue(pc.white(' VERIFICATION CANCELLED '))) + '  ' + pc.dim('No shipping verdict'));
   } else {
     lines.push(
       pc.bold(pc.bgRed(pc.white(' NOT READY TO SHIP '))) +
@@ -49,6 +51,7 @@ export function formatTerminalReport(report: VerificationReport): string {
         `${pc.yellow(String(report.counts.warnings) + ' warnings')} · ` +
         unknownText +
         `${pc.green(String(report.counts.passed) + ' passed')} · ` +
+        `${Math.round(report.evidenceCoverage * 100)}% evidence coverage · ` +
         `${(report.durationMs / 1000).toFixed(1)}s`
     )
   );
@@ -70,7 +73,7 @@ export function formatTerminalReport(report: VerificationReport): string {
 
   // Highlight Blockers
   const blockers = report.checks.filter(
-    (c) => c.severity === 'blocker' || c.status === 'block'
+    (c) => c.status === 'block'
   );
 
   if (blockers.length > 0) {

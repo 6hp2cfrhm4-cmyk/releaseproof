@@ -16,6 +16,7 @@ import { crawlViaHttp } from './http-crawler.js';
 export async function verifyBrowserApp(
   options: BrowserVerificationOptions
 ): Promise<BrowserVerificationResult> {
+  throwIfBrowserAborted(options.signal);
   await fs.mkdir(options.screenshotsDir, { recursive: true });
 
   let pageResults: PageCrawlResult[] = [];
@@ -48,13 +49,17 @@ export async function verifyBrowserApp(
     });
     usedPlaywright = true;
     capabilityStatus = 'VERIFIED';
+    const closeOnAbort = () => { void browser.close(); };
+    options.signal?.addEventListener('abort', closeOnAbort, { once: true });
 
     try {
       pageResults = await runPlaywrightCrawl(browser, options);
     } finally {
+      options.signal?.removeEventListener('abort', closeOnAbort);
       await browser.close();
     }
   } catch (err: unknown) {
+    if (options.signal?.aborted || (err instanceof Error && err.name === 'AbortError')) throw err;
     // If Playwright fails to launch (e.g. browser binaries not installed), use HTTP fallback
     pageResults = await crawlViaHttp(options);
     capabilityStatus = 'HTTP_FALLBACK';
@@ -110,6 +115,7 @@ async function runPlaywrightCrawl(
   const maxDepth = options.maxDepth ?? 3;
 
   for (let idx = 0; idx < queue.length && pageResults.length < maxPages; idx++) {
+    throwIfBrowserAborted(options.signal);
     const item = queue[idx];
     let normRoute = item.route.startsWith('/') ? item.route : `/${item.route}`;
     if (visited.has(normRoute)) continue;
@@ -161,6 +167,7 @@ async function runPlaywrightCrawl(
       });
       status = resp?.status() ?? 200;
       await page.waitForTimeout(options.observationWindowMs ?? 2000);
+      throwIfBrowserAborted(options.signal);
       title = await page.title().catch(() => '');
 
       // Check DOM state
@@ -232,6 +239,13 @@ async function runPlaywrightCrawl(
 
   await context.close();
   return pageResults;
+}
+
+function throwIfBrowserAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  const cancelled = new Error('Browser verification was cancelled.');
+  cancelled.name = 'AbortError';
+  throw cancelled;
 }
 
 function buildBrowserChecks(results: PageCrawlResult[], usedPlaywright: boolean, browserApplication: boolean): CheckResult[] {

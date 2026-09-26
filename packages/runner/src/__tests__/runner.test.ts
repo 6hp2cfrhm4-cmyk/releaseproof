@@ -41,6 +41,28 @@ describe('runner', () => {
     expect(res.timedOut).toBe(true);
   });
 
+  it('cancels an owned command when its AbortSignal is aborted', async () => {
+    const controller = new AbortController();
+    const pending = execCommand('node -e "setInterval(() => {}, 1000)"', { signal: controller.signal, timeoutMs: 10000 });
+    setTimeout(() => controller.abort(), 150);
+    const result = await pending;
+    expect(result.aborted).toBe(true);
+    expect(result.killed).toBe(true);
+    expect(result.exitCode).not.toBe(0);
+  });
+
+  it('does not spawn a command when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const result = await execCommand('node -e "process.exit(99)"', { signal: controller.signal });
+    expect(result).toMatchObject({ exitCode: null, aborted: true, killed: false });
+  });
+
+  it('caps captured command output at the configured limit', async () => {
+    const result = await execCommand('node -e "process.stdout.write(\'x\'.repeat(10000))"', { maxBufferBytes: 32 });
+    expect(result.stdout).toHaveLength(32);
+  });
+
   it('detects listening port and waits for it', async () => {
     const server = http.createServer((_req, res) => {
       res.writeHead(200);

@@ -8,10 +8,14 @@ export function generateAiHandoffMarkdown(report: VerificationReport): string {
   const lines: string[] = [];
   lines.push('# ReleaseProof Fix Task');
   lines.push('');
-  if (report.verdict === 'INCOMPLETE') {
+  if (report.runStatus === 'cancelled') {
+    lines.push('Verification was cancelled before a shipping verdict could be produced. Do not treat this report as evidence that the application is ready or broken.');
+  } else if (report.verdict === 'INCOMPLETE') {
     lines.push('Verification is incomplete because one or more required capabilities, external dependencies, or verification steps were unavailable. Inspect each finding classification below.');
   } else if (report.verdict === 'READY') {
     lines.push('The application passed production-readiness verification.');
+  } else if (report.verdict === 'CANCELLED') {
+    lines.push('Verification was cancelled before a shipping verdict could be produced.');
   } else {
     lines.push('The application failed production-readiness verification.');
   }
@@ -27,6 +31,7 @@ export function generateAiHandoffMarkdown(report: VerificationReport): string {
   lines.push('');
   lines.push(`**Status**: ${report.verdict}`);
   lines.push(`**Score**: ${report.score} / 100`);
+  lines.push(`**Evidence coverage**: ${Math.round(report.evidenceCoverage * 100)}%`);
   lines.push(`**Findings**: ${issues.length} (${report.counts.blockers} blockers, ${report.counts.warnings} warnings, ${report.counts.unknown || 0} external dependencies)`);
   lines.push('');
 
@@ -127,7 +132,7 @@ export function generateCompactAiContext(report: VerificationReport): string {
 
   const parts: string[] = [
     `Project: ${report.projectName}`,
-    `Verdict: ${report.verdict} (Score: ${report.score}/100)`,
+    `Verdict: ${report.verdict} (Score: ${report.score}/100; evidence coverage: ${Math.round(report.evidenceCoverage * 100)}%)`,
     `Blockers (${blockers.length}):`,
   ];
 

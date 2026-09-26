@@ -1,12 +1,13 @@
 import { CheckResult, CommandEvidence } from '@releaseproof/schemas';
 import { execCommand } from '@releaseproof/runner';
-import { detectExternalServiceDependency } from './external-services.js';
+import { detectExternalServiceDependency, detectMissingRequiredEnvironment } from './external-services.js';
 
 export async function runBuildCheck(
   workspaceDir: string,
   buildCommand?: string,
   environment: Record<string, string | undefined> = {},
-  allowHostEnv: string[] = []
+  allowHostEnv: string[] = [],
+  signal?: AbortSignal
 ): Promise<CheckResult> {
   if (!buildCommand) {
     return {
@@ -25,7 +26,14 @@ export async function runBuildCheck(
     timeoutMs: 180000,
     env: environment,
     allowHostEnv,
+    signal,
   });
+
+  if (result.aborted) {
+    const cancelled = new Error('Production build was cancelled.');
+    cancelled.name = 'AbortError';
+    throw cancelled;
+  }
 
   const evidence: CommandEvidence = {
     type: 'command',
@@ -49,6 +57,19 @@ export async function runBuildCheck(
   }
 
   const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  if (detectMissingRequiredEnvironment(combinedOutput)) {
+    return {
+      id: 'build-check',
+      title: 'Required application environment was unavailable during build',
+      category: 'build',
+      status: 'unknown',
+      severity: 'medium',
+      summary: `Build command \`${buildCommand}\` could not be verified because required project environment values were not supplied.`,
+      evidence: [evidence],
+      remediation: 'Provide disposable verification values for the required variables and retry.',
+      classification: 'VERIFICATION_UNAVAILABLE',
+    };
+  }
   const extDep = detectExternalServiceDependency(combinedOutput);
 
   if (extDep) {
@@ -58,7 +79,7 @@ export async function runBuildCheck(
       category: 'build',
       status: 'unknown',
       severity: 'medium',
-      summary: `Build command \`${buildCommand}\` failed because an external service (${extDep.name}) was unreachable during static page generation.`,
+      summary: `Build command \`${buildCommand}\` could not be verified: ${extDep.reason}`,
       evidence: [evidence],
       remediation: extDep.remediation,
       metadata: {

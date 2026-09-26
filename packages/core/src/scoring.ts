@@ -18,6 +18,8 @@ export const CATEGORY_WEIGHTS: Record<CheckCategory, number> = {
 
 export interface ScoreComputationResult {
   score: number;
+  /** Fraction of required checks with an observed pass, warning, or blocker. */
+  evidenceCoverage: number;
   verdict: VerificationVerdict;
   categoryScores: Record<CheckCategory, CategoryScore>;
   counts: {
@@ -38,18 +40,28 @@ export function computeScore(checks: CheckResult[]): ScoreComputationResult {
   let unknown = 0;
   let skipped = 0;
   let notApplicable = 0;
+  let observedRequired = 0;
+  let applicableRequired = 0;
 
   for (const check of checks) {
-    if (check.status === 'block' || check.severity === 'blocker') {
+    if (check.status === 'block') {
       blockers++;
+      observedRequired++;
+      applicableRequired++;
     } else if (check.status === 'pass') {
       passed++;
+      observedRequired++;
+      applicableRequired++;
     } else if (check.status === 'warn') {
       warnings++;
+      observedRequired++;
+      applicableRequired++;
     } else if (check.status === 'unknown') {
       unknown++;
+      applicableRequired++;
     } else if (check.status === 'skipped') {
       skipped++;
+      applicableRequired++;
     } else if (check.status === 'not_applicable') {
       notApplicable++;
     }
@@ -77,27 +89,24 @@ export function computeScore(checks: CheckResult[]): ScoreComputationResult {
     }
     categoryScores[cat].max = CATEGORY_WEIGHTS[cat];
 
-    const hasBlock = applicableChecks.some((c) => c.status === 'block' || c.severity === 'blocker');
+    const hasBlock = applicableChecks.some((c) => c.status === 'block');
     const hasUnknown = applicableChecks.some((c) => c.status === 'unknown');
+    const hasSkipped = applicableChecks.some((c) => c.status === 'skipped');
     const hasWarn = applicableChecks.some((c) => c.status === 'warn');
-    const allSkipped = applicableChecks.every((c) => c.status === 'skipped');
+    const credits = applicableChecks.map((check) => {
+      if (check.status === 'pass') return 1;
+      if (check.status === 'warn') return 0.5;
+      return 0;
+    });
+    categoryScores[cat].score = Math.round(
+      CATEGORY_WEIGHTS[cat] * credits.reduce<number>((sum, credit) => sum + credit, 0) / credits.length
+    );
 
-    if (hasBlock) {
-      categoryScores[cat].score = 0;
-      categoryScores[cat].status = 'fail';
-    } else if (hasUnknown) {
-      // Incomplete verification for this category: score is 50% max weight
-      categoryScores[cat].score = Math.round(CATEGORY_WEIGHTS[cat] * 0.5);
-      categoryScores[cat].status = 'unknown';
-    } else if (hasWarn) {
-      categoryScores[cat].score = Math.round(CATEGORY_WEIGHTS[cat] * 0.5);
-      categoryScores[cat].status = 'warn';
-    } else if (allSkipped) {
-      categoryScores[cat].status = 'skipped';
-    } else {
-      categoryScores[cat].score = CATEGORY_WEIGHTS[cat];
-      categoryScores[cat].status = 'pass';
-    }
+    if (hasBlock) categoryScores[cat].status = 'fail';
+    else if (hasUnknown) categoryScores[cat].status = 'unknown';
+    else if (hasSkipped) categoryScores[cat].status = 'skipped';
+    else if (hasWarn) categoryScores[cat].status = 'warn';
+    else categoryScores[cat].status = 'pass';
   }
 
   let earnedScore = 0;
@@ -121,6 +130,7 @@ export function computeScore(checks: CheckResult[]): ScoreComputationResult {
 
   return {
     score: Math.min(100, Math.max(0, totalScore)),
+    evidenceCoverage: applicableRequired === 0 ? 0 : observedRequired / applicableRequired,
     verdict,
     categoryScores,
     counts: {

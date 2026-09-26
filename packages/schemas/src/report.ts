@@ -9,8 +9,10 @@ export const CategoryScoreSchema = z.object({
 });
 export type CategoryScore = z.infer<typeof CategoryScoreSchema>;
 
-export const VerificationVerdictSchema = z.enum(['READY', 'NOT_READY', 'INCOMPLETE']);
+export const VerificationVerdictSchema = z.enum(['READY', 'NOT_READY', 'INCOMPLETE', 'CANCELLED']);
 export type VerificationVerdict = z.infer<typeof VerificationVerdictSchema>;
+
+export const VerificationRunStatusSchema = z.enum(['completed', 'cancelled', 'internal_error']);
 
 export const BrowserVerificationStatusSchema = z.enum([
   'VERIFIED',
@@ -23,12 +25,14 @@ export type BrowserVerificationStatus = z.infer<typeof BrowserVerificationStatus
 export const VerificationReportSchema = z.object({
   id: z.string(),
   version: z.string().default('0.2.0-dev.0'),
+  runStatus: VerificationRunStatusSchema.default('completed'),
   timestamp: z.string(),
   projectName: z.string(),
   projectPath: z.string(),
   profile: ProjectProfileSchema,
   verdict: VerificationVerdictSchema,
   score: z.number().min(0).max(100),
+  evidenceCoverage: z.number().min(0).max(1).default(0),
   categoryScores: z.record(CheckCategorySchema, CategoryScoreSchema),
   counts: z.object({
     total: z.number(),
@@ -49,5 +53,18 @@ export const VerificationReportSchema = z.object({
   fixPromptPath: z.string().optional(),
   htmlReportPath: z.string().optional(),
   jsonReportPath: z.string().optional(),
+}).superRefine((report, context) => {
+  if (report.runStatus === 'cancelled' && report.verdict !== 'CANCELLED') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['verdict'], message: 'Cancelled runs must not contain a shipping verdict.' });
+  }
+  if (report.verdict === 'CANCELLED' && report.runStatus !== 'cancelled') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['runStatus'], message: 'A cancelled verdict requires cancelled run status.' });
+  }
+  if (report.runStatus === 'cancelled' && report.score !== 0) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['score'], message: 'Cancelled runs cannot receive a readiness score.' });
+  }
+  if (report.verdict === 'READY' && report.checks.some((check) => check.status === 'block')) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['verdict'], message: 'A report with a blocker cannot be READY.' });
+  }
 });
 export type VerificationReport = z.infer<typeof VerificationReportSchema>;

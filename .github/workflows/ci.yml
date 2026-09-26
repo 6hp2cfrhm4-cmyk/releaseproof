@@ -129,3 +129,38 @@ jobs:
           node -e "const r=require(process.argv[1]); if(r.verdict!=='READY') process.exit(1)" "$RUNNER_TEMP/tarball-report.json"
           node scripts/generate-sha256s.mjs "$RUNNER_TEMP/$TARBALL"
           test -s SHA256SUMS.txt
+
+  desktop-build:
+    name: Desktop build and Windows installer smoke
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm --filter @releaseproof/desktop test
+      - name: Build NSIS installer
+        run: pnpm --filter @releaseproof/desktop run package
+      - name: Verify installer artifact and checksum
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem apps/desktop/release/ReleaseProof-Setup-*.exe | Select-Object -First 1
+          if (-not $installer) { throw 'Windows installer was not produced.' }
+          if ($installer.Length -lt 1000000) { throw 'Windows installer is unexpectedly small.' }
+          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($installer.Name)" | Set-Content apps/desktop/release/SHA256SUMS.txt
+          Get-Content apps/desktop/release/SHA256SUMS.txt
+      - name: Upload installer smoke artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: releaseproof-desktop-windows
+          path: |
+            apps/desktop/release/ReleaseProof-Setup-*.exe
+            apps/desktop/release/SHA256SUMS.txt

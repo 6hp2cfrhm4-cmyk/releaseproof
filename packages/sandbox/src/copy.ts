@@ -31,6 +31,7 @@ export interface CopyOptions {
   excludes?: Set<string>;
   onFileCopied?: (relPath: string) => void;
   maxFiles?: number;
+  signal?: AbortSignal;
 }
 
 /**
@@ -49,6 +50,11 @@ export async function copyWorkspaceClean(
   let copiedFilesCount = 0;
 
   async function copyRecursive(currentSource: string, currentTarget: string) {
+    if (options.signal?.aborted) {
+      const cancelled = new Error('Workspace copy was cancelled.');
+      cancelled.name = 'AbortError';
+      throw cancelled;
+    }
     if (copiedFilesCount >= maxFiles) {
       throw new Error(`Workspace copy exceeded maximum file limit of ${maxFiles}`);
     }
@@ -68,6 +74,11 @@ export async function copyWorkspaceClean(
     }
 
     for (const entry of entries) {
+      if (options.signal?.aborted) {
+        const cancelled = new Error('Workspace copy was cancelled.');
+        cancelled.name = 'AbortError';
+        throw cancelled;
+      }
       if (excludes.has(entry.name)) {
         continue;
       }

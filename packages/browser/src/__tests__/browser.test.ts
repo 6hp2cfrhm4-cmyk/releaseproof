@@ -26,6 +26,10 @@ describe('browser verification', () => {
       } else if (req.url === '/no-content') {
         res.writeHead(204);
         res.end();
+      } else if (req.url === '/slow') {
+        setTimeout(() => {
+          if (!res.destroyed) res.end('slow response');
+        }, 5000);
       } else {
         res.writeHead(404);
         res.end('Not Found');
@@ -106,5 +110,19 @@ describe('browser verification', () => {
     });
     expect(res.capabilityStatus).toBe('VERIFIED');
     expect(res.checks.find((c) => c.id === 'browser-uncaught-exceptions')?.status).toBe('block');
+  });
+
+  it('cancels an in-flight HTTP fallback request', async () => {
+    const controller = new AbortController();
+    const verification = verifyBrowserApp({
+      baseUrl,
+      initialRoutes: ['/slow'],
+      maxDepth: 0,
+      requiresBrowserRuntime: false,
+      screenshotsDir: path.join(os.tmpdir(), 'rp-test-screenshots'),
+      signal: controller.signal,
+    });
+    setTimeout(() => controller.abort(), 100);
+    await expect(verification).rejects.toMatchObject({ name: 'AbortError' });
   });
 });

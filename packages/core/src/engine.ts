@@ -3,8 +3,10 @@ import * as fs from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import {
   VerificationReport,
+  VerificationReportSchema,
   ReleaseProofUserConfig,
   CheckResult,
+  ReleaseProofConfigSchema,
 } from '@releaseproof/schemas';
 import { detectProject } from '@releaseproof/detector';
 import { createCleanWorkspace, DEFAULT_EXCLUDES } from '@releaseproof/sandbox';
@@ -29,25 +31,33 @@ export interface EngineOptions {
   config?: ReleaseProofUserConfig;
   onProgress?: ProgressCallback;
   skipSandbox?: boolean;
+  signal?: AbortSignal;
 }
 
 export async function verifyProject(options: EngineOptions): Promise<VerificationReport> {
   const startTime = Date.now();
-  const projectDir = path.resolve(options.projectDir);
+  let projectDir = path.resolve(options.projectDir);
   const artifactsDir = path.join(projectDir, '.releaseproof');
   const screenshotsDir = path.join(artifactsDir, 'screenshots');
+  const signal = options.signal;
   const progress: ProgressCallback = options.onProgress ?? (() => {});
 
   await fs.mkdir(artifactsDir, { recursive: true });
   await fs.mkdir(screenshotsDir, { recursive: true });
+  throwIfAborted(signal);
 
-  // Load local project config if present
+  // Load local project config if present. A malformed config is user input,
+  // not an instruction to silently fall back to defaults.
   let localConfig: ReleaseProofUserConfig = {};
+  const configPath = path.join(projectDir, '.releaseproof.json');
   try {
-    const configPath = path.join(projectDir, '.releaseproof.json');
     const content = await fs.readFile(configPath, 'utf-8');
-    localConfig = JSON.parse(content);
-  } catch {}
+    localConfig = JSON.parse(content) as ReleaseProofUserConfig;
+  } catch (error: unknown) {
+    if ((error as { code?: string }).code !== 'ENOENT') {
+      throw new Error(`Invalid .releaseproof.json: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 
   const ignoreDirs: string[] = [
     '.releaseproof-venv',
@@ -55,7 +65,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     ...((options.config?.ignoreDirs || []).filter((d): d is string => Boolean(d))),
   ];
 
-  const config: ReleaseProofUserConfig = {
+  const mergedConfig: ReleaseProofUserConfig = {
     ...localConfig,
     ...options.config,
     checks: {
@@ -70,6 +80,16 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     criticalRoutes: options.config?.criticalRoutes ?? localConfig.criticalRoutes ?? [],
     ignoreDirs,
   };
+  const config = ReleaseProofConfigSchema.parse(mergedConfig);
+
+  if (config.target) {
+    const resolvedTarget = path.resolve(projectDir, config.target);
+    const relativeTarget = path.relative(projectDir, resolvedTarget);
+    if (relativeTarget.startsWith('..') || path.isAbsolute(relativeTarget)) {
+      throw new Error(`Configured target escapes the project directory: ${config.target}`);
+    }
+    projectDir = resolvedTarget;
+  }
 
   const allChecks: CheckResult[] = [];
 
@@ -137,19 +157,16 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
   }
 
   // Phase 3: Setup Clean Environment
-  progress('Creating isolated clean verification workspace', 'running');
   const copyExcludes = new Set(DEFAULT_EXCLUDES);
   if (config.environment?.includeEnvFiles) {
     for (const name of ['.env', '.env.local', '.env.development', '.env.test', '.env.production', '.env.development.local', '.env.test.local', '.env.production.local']) {
       copyExcludes.delete(name);
     }
   }
-  const workspace = options.skipSandbox
-    ? { path: projectDir, dispose: async () => {} }
-    : await createCleanWorkspace(projectDir, { excludes: copyExcludes });
-  progress('Creating isolated clean verification workspace', 'done');
+  let workspace: { path: string; dispose: () => Promise<void> } = { path: projectDir, dispose: async () => {} };
 
   let runningService: any = null;
+  let runStatus: VerificationReport['runStatus'] = 'completed';
   let activePort = config.start?.port || profile.ports[0] || 3000;
   const browserDisabled = config.checks?.browser === false || config.browser?.enabled === false;
   let browserVerification: VerificationReport['browserVerification'] = browserDisabled
@@ -170,23 +187,22 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
   let buildCommand = config.build?.command || profile.commands.build;
   let startCommand = config.start?.command || profile.commands.start;
   let executionEnvironment: Record<string, string | undefined> = { ...providedEnvironment };
-  const pythonRuntimeDir = profile.languages.includes('python')
-    ? path.join(workspace.path, '.releaseproof', `python-${randomBytes(6).toString('hex')}`)
-    : undefined;
-
-  const onSignal = async () => {
-    if (runningService) {
-      try { await runningService.kill(); } catch {}
-    }
-    try { await workspace.dispose(); } catch {}
-    process.exit(130);
-  };
-  process.once('SIGINT', onSignal);
-  process.once('SIGTERM', onSignal);
+  let pythonRuntimeDir: string | undefined;
 
   try {
+    throwIfAborted(signal);
+    progress('Creating isolated clean verification workspace', 'running');
+    if (!options.skipSandbox) {
+      workspace = await createCleanWorkspace(projectDir, { excludes: copyExcludes, signal });
+    }
+    throwIfAborted(signal);
+    progress('Creating isolated clean verification workspace', 'done');
+    pythonRuntimeDir = profile.languages.includes('python')
+      ? path.join(workspace.path, '.releaseproof', `python-${randomBytes(6).toString('hex')}`)
+      : undefined;
+
     if (profile.languages.includes('python') && (installCommand || buildCommand || startCommand)) {
-      const prepared = await preparePythonExecution(workspace.path, pythonRuntimeDir!, { installCommand, buildCommand, startCommand }, executionEnvironment, allowHostEnv, config.python?.interpreter);
+      const prepared = await preparePythonExecution(workspace.path, pythonRuntimeDir!, { installCommand, buildCommand, startCommand }, executionEnvironment, allowHostEnv, config.python?.interpreter, signal);
       if (!prepared.ok) {
         allChecks.push({
           id: 'python-interpreter-setup',
@@ -218,7 +234,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     // Phase 4: Clean Install
     if (config.checks?.install !== false && installCommand) {
       progress('Running clean installation', 'running', installCommand);
-      const installRes = await runInstallCheck(workspace.path, installCommand, executionEnvironment, allowHostEnv);
+      const installRes = await runInstallCheck(workspace.path, installCommand, executionEnvironment, allowHostEnv, signal);
       allChecks.push(installRes);
       progress('Running clean installation', installRes.status === 'block' ? 'fail' : 'done');
 
@@ -241,12 +257,21 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     const buildCmd = buildCommand;
     if (config.checks?.build !== false && buildCmd) {
       progress('Running production build', 'running', buildCmd);
-      const buildRes = await runBuildCheck(workspace.path, buildCmd, executionEnvironment, allowHostEnv);
+      const buildRes = await runBuildCheck(workspace.path, buildCmd, executionEnvironment, allowHostEnv, signal);
       allChecks.push(buildRes);
       progress('Running production build', buildRes.status === 'block' ? 'fail' : 'done');
 
       if (buildRes.status === 'block') {
         throw new Error('Production build failed.');
+      }
+      if (buildRes.status === 'unknown') {
+        if (!browserDisabled && profile.capabilities.browser) {
+          browserVerification = {
+            status: 'UNAVAILABLE',
+            reason: 'Browser verification was not attempted because the production build could not be verified.',
+          };
+        }
+        throw new Error('Production build could not be verified in the current environment.');
       }
     }
 
@@ -262,7 +287,8 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
         config.start?.healthCheckPath ?? '/',
         config.start?.stabilityWindowMs ?? 5000,
         executionEnvironment,
-        allowHostEnv
+        allowHostEnv,
+        signal
       );
 
       allChecks.push(startupRes.checkResult);
@@ -288,6 +314,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
           timeoutMs: config.browser?.timeoutMs ?? 15000,
           observationWindowMs: config.browser?.observationWindowMs ?? 2000,
           requiresBrowserRuntime: profile.capabilities.browser,
+          signal,
         });
 
         allChecks.push(...browserRes.checks);
@@ -308,6 +335,9 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
       progress('Checking README as contract', 'done');
     }
   } catch (err: unknown) {
+    if (signal?.aborted || (err instanceof Error && err.name === 'AbortError')) {
+      runStatus = 'cancelled';
+    } else {
     const isExpectedShortCircuit =
       err instanceof Error &&
       (err.message.includes('failed in clean environment') ||
@@ -316,6 +346,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
         err.message.includes('Python verification environment unavailable'));
 
     if (!isExpectedShortCircuit) {
+      runStatus = 'internal_error';
       allChecks.push({
         id: 'engine-unexpected-error',
         title: 'Verification engine pipeline error',
@@ -327,9 +358,8 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
         evidence: [],
       });
     }
+    }
   } finally {
-    process.off('SIGINT', onSignal);
-    process.off('SIGTERM', onSignal);
     if (runningService) {
       try {
         await runningService.kill();
@@ -367,6 +397,26 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     }
   }
 
+  // Static checks alone cannot establish that an application actually runs.
+  // In particular, a monorepo root with no detected executable target must
+  // not become READY merely because its README and secret scan pass.
+  const hasRuntimeEvidence = allChecks.some((check) =>
+    check.status === 'pass' &&
+    (check.id === 'startup-check' || check.id === 'browser-routes-verified')
+  );
+  if (!hasRuntimeEvidence && !allChecks.some((check) => check.status === 'block' || check.status === 'unknown')) {
+    allChecks.push({
+      id: 'runtime-evidence-missing',
+      title: 'Runnable application target was not verified',
+      category: 'runtime',
+      status: 'unknown',
+      severity: 'medium',
+      classification: 'VERIFICATION_UNAVAILABLE',
+      summary: 'No successful application startup or route verification was observed. For monorepos, select the runnable subproject or configure its start command.',
+      evidence: [],
+    });
+  }
+
   // Phase 9: Scoring & Report Compilation
   const scoreResult = computeScore(allChecks);
   const durationMs = Date.now() - startTime;
@@ -380,6 +430,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
   const rawReport: VerificationReport = {
     id: reportId,
     version: '0.2.0-dev.0',
+    runStatus,
     timestamp: new Date().toISOString(),
     projectName: profile.name,
     projectPath: relProjectPath,
@@ -387,8 +438,9 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
       ...profile,
       root: relProjectPath,
     },
-    verdict: scoreResult.verdict,
-    score: scoreResult.score,
+    verdict: runStatus === 'cancelled' ? 'CANCELLED' : scoreResult.verdict,
+    score: runStatus === 'cancelled' ? 0 : scoreResult.score,
+    evidenceCoverage: scoreResult.evidenceCoverage,
     categoryScores: scoreResult.categoryScores,
     counts: scoreResult.counts,
     checks: allChecks,
@@ -400,13 +452,24 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     fixPromptPath: relFixPath,
   };
 
-  const report = redactObject(rawReport, sensitiveValues);
+  const report = VerificationReportSchema.parse(redactObject(rawReport, sensitiveValues));
 
   // Save JSON report using absolute path on disk
   const absoluteJsonPath = path.join(artifactsDir, 'report.json');
-  await fs.writeFile(absoluteJsonPath, JSON.stringify(report, null, 2), 'utf-8');
+  await writeAtomicFile(absoluteJsonPath, JSON.stringify(report, null, 2));
 
   return report;
+}
+
+async function writeAtomicFile(target: string, content: string): Promise<void> {
+  const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
+  await fs.writeFile(temporary, content, 'utf8');
+  try {
+    await fs.rename(temporary, target);
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {});
+    throw error;
+  }
 }
 
 interface PythonCommands {
@@ -421,7 +484,8 @@ async function preparePythonExecution(
   commands: PythonCommands,
   baseEnvironment: Record<string, string | undefined>,
   allowHostEnv: string[],
-  explicitInterpreter?: string
+  explicitInterpreter?: string,
+  signal?: AbortSignal
 ): Promise<(PythonCommands & { ok: true; interpreter: string; environment: Record<string, string | undefined> }) | { ok: false; error: string }> {
   const candidates = explicitInterpreter
     ? [JSON.stringify(path.resolve(explicitInterpreter))]
@@ -434,6 +498,7 @@ async function preparePythonExecution(
       timeoutMs: 60000,
       env: baseEnvironment,
       allowHostEnv,
+      signal,
     });
     if (result.exitCode === 0) {
       const interpreterCandidates = process.platform === 'win32'
@@ -456,6 +521,7 @@ async function preparePythonExecution(
         timeoutMs: 30000,
         env: baseEnvironment,
         allowHostEnv,
+        signal,
       });
       if (pipProbe.exitCode !== 0) {
         lastError = `${candidate} created a virtual environment whose pip is unusable: ${pipProbe.stderr.trim() || pipProbe.stdout.trim() || `exit ${pipProbe.exitCode}`}`;
@@ -491,6 +557,13 @@ async function preparePythonExecution(
   }
 
   return { ok: false, error: `Could not create workspace-local Python virtual environment: ${lastError}` };
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  const error = new Error('Verification was cancelled.');
+  error.name = 'AbortError';
+  throw error;
 }
 
 async function loadSensitiveEnvFileValues(projectDir: string, configuredFile?: string): Promise<string[]> {

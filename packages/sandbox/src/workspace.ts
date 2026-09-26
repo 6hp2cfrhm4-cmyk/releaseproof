@@ -25,8 +25,13 @@ export async function createCleanWorkspace(
   const tempDir = path.join(os.tmpdir(), `releaseproof-${id}`);
 
   await fs.mkdir(tempDir, { recursive: true });
-
-  const { copiedFilesCount } = await copyWorkspaceClean(originalPath, tempDir, options);
+  let copiedFilesCount = 0;
+  try {
+    ({ copiedFilesCount } = await copyWorkspaceClean(originalPath, tempDir, options));
+  } catch (error: unknown) {
+    await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }).catch(() => {});
+    throw error;
+  }
 
   let disposed = false;
   let lastCleanupError: Error | undefined;

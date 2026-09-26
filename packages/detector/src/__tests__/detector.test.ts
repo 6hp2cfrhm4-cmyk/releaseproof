@@ -77,6 +77,22 @@ describe('detector', () => {
     }
   });
 
+  it('uses an Express source-declared default port when the start script has none', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'rp-detector-express-port-'));
+    try {
+      await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({
+        name: 'express-default-port',
+        dependencies: { express: '4.21.0' },
+        scripts: { start: 'node app.js' },
+      }));
+      await fs.writeFile(path.join(root, 'app.js'), "app.set('port', process.env.PORT || process.env.OPENSHIFT_NODEJS_PORT || 8080);\n");
+      const profile = await detectProject(root);
+      expect(profile.ports[0]).toBe(8080);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('detects FastAPI application with uvicorn', async () => {
     await fs.mkdir(testRoot, { recursive: true });
     await fs.writeFile(

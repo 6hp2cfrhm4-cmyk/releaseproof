@@ -37,12 +37,14 @@ export async function runReadmeContractCheck(
 
   const commandRegex = /```(?:bash|sh|shell)?\s*\n([\s\S]*?)```/g;
   let match: RegExpExecArray | null;
-  const documentedNpmRunCommands: string[] = [];
+  const brokenCommands: string[] = [];
   const suspiciousInstructions: string[] = [];
 
   while ((match = commandRegex.exec(readmeContent)) !== null) {
     const block = match[1];
     const lines = block.split('\n');
+    let commandDirectory = projectDir;
+    let commandScripts = pkgScripts;
     for (const line of lines) {
       const trimmed = line.trim();
 
@@ -57,9 +59,29 @@ export async function runReadmeContractCheck(
       }
 
       const cmdLine = trimmed.startsWith('$ ') ? trimmed.slice(2).trim() : trimmed;
+      const cdMatch = /^cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))$/.exec(cmdLine);
+      if (cdMatch) {
+        const candidate = path.resolve(commandDirectory, cdMatch[1] || cdMatch[2] || cdMatch[3]);
+        const relative = path.relative(projectDir, candidate);
+        if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
+          commandDirectory = candidate;
+          try {
+            const nestedPackage = JSON.parse(await fs.readFile(path.join(candidate, 'package.json'), 'utf8'));
+            commandScripts = nestedPackage.scripts || {};
+          } catch {
+            commandScripts = {};
+          }
+        } else {
+          // README commands outside the selected project cannot be checked here.
+          commandScripts = {};
+        }
+        continue;
+      }
       const runMatch = cmdLine.match(/^(?:npm run|pnpm run|pnpm|yarn)\s+([a-zA-Z0-9_:-]+)/);
       if (runMatch && !['i', 'install', 'add', 'remove', 'update', 'upgrade', 'test', 'run', 'exec', 'dlx'].includes(runMatch[1])) {
-        documentedNpmRunCommands.push(runMatch[1]);
+        if (Object.keys(commandScripts).length > 0 && !(runMatch[1] in commandScripts)) {
+          brokenCommands.push(runMatch[1]);
+        }
       }
     }
   }
@@ -83,10 +105,6 @@ export async function runReadmeContractCheck(
       remediation: 'Replace curl/wget pipe-to-shell instructions with vetted package manager dependencies or verified lockfile scripts.',
     });
   }
-
-  const brokenCommands = documentedNpmRunCommands.filter(
-    (cmd) => Object.keys(pkgScripts).length > 0 && !(cmd in pkgScripts)
-  );
 
   if (brokenCommands.length > 0) {
     results.push({

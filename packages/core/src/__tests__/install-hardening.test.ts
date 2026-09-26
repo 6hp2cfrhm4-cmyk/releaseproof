@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 const execCommand = vi.hoisted(() => vi.fn());
 vi.mock('@releaseproof/runner', () => ({ execCommand }));
 
-import { isMissingNativeToolchain, runInstallCheck } from '../checks/install.js';
+import { isIncompatiblePackageManager, isMissingNativeToolchain, isPackageManagerPolicyUnavailable, isUnsupportedVerificationPlatform, runInstallCheck } from '../checks/install.js';
 
 describe('install failure classification', () => {
   it('recognizes a missing Windows native compiler as unavailable verification capability', () => {
@@ -37,5 +37,20 @@ describe('install failure classification', () => {
     expect(result.status).toBe('unknown');
     expect(result.classification).toBe('VERIFICATION_UNAVAILABLE');
     expect(result.metadata).toEqual({ timedOut: true, killed: true });
+  });
+
+  it('recognizes a package manager that cannot parse the committed lockfile', () => {
+    expect(isIncompatiblePackageManager('ERR_PNPM_BROKEN_LOCKFILE\nThe lockfileVersion of 6.0 is incompatible with the supported formats')).toBe(true);
+    expect(isIncompatiblePackageManager('ERR_PNPM_OUTDATED_LOCKFILE: package manifest changed')).toBe(false);
+  });
+
+  it('recognizes dependency build scripts blocked by the host package-manager policy', () => {
+    expect(isPackageManagerPolicyUnavailable('ERR_PNPM_IGNORED_BUILDS\nIgnored build scripts: sharp')).toBe(true);
+    expect(isPackageManagerPolicyUnavailable('npm ERR! build script failed with exit code 1')).toBe(false);
+  });
+
+  it('recognizes a dependency that explicitly does not support the verifier OS', () => {
+    expect(isUnsupportedVerificationPlatform('RuntimeError: uvloop does not support Windows at the moment')).toBe(true);
+    expect(isUnsupportedVerificationPlatform('RuntimeError: invalid application configuration')).toBe(false);
   });
 });
