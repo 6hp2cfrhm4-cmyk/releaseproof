@@ -5,10 +5,12 @@ import { randomUUID } from 'node:crypto';
 import { fork, ChildProcess } from 'node:child_process';
 import { detectProject } from '@releaseproof/detector';
 import { VerificationReportSchema } from '@releaseproof/schemas';
+import { generateAiHandoffMarkdown, generateFindingHandoffMarkdown } from '@releaseproof/reporter';
 import type { DesktopSettings, DetectionPreview, RunEvent } from '../shared/ipc.js';
+import { assertAbsoluteProjectPath, validateArtifactKind, validateRunInput, validateSettingsPatch } from './validation.js';
 
 const defaultSettings: DesktopSettings = { theme: 'system', defaultTimeoutMs: 30000, cleanWorkspace: true };
-const runs = new Map<string, { projectPath: string; report?: ReturnType<typeof VerificationReportSchema.parse>; worker?: ChildProcess }>();
+const runs = new Map<string, { projectPath: string; report?: ReturnType<typeof VerificationReportSchema.parse>; worker?: ChildProcess; cancelling?: boolean }>();
 let mainWindow: BrowserWindow | undefined;
 let settingsCache: DesktopSettings = defaultSettings;
 
@@ -25,10 +27,6 @@ async function writeJson(file: string, value: unknown): Promise<void> {
   await fs.rename(tmp, file);
 }
 function send(event: RunEvent): void { mainWindow?.webContents.send('run:event', event); }
-function assertProjectPath(value: unknown): string {
-  if (typeof value !== 'string' || !path.isAbsolute(value)) throw new Error('A canonical absolute project path is required.');
-  return path.normalize(value);
-}
 function assertRun(runId: unknown) {
   if (typeof runId !== 'string' || !runs.has(runId)) throw new Error('Unknown verification run.');
   return runs.get(runId)!;
@@ -61,15 +59,22 @@ function registerIpc(): void {
     return result.canceled ? undefined : result.filePaths[0];
   });
   ipcMain.handle('project:preview', async (_event, projectPath: unknown): Promise<DetectionPreview> => {
-    const canonical = assertProjectPath(projectPath);
+    const canonical = assertAbsoluteProjectPath(projectPath);
     const profile = await detectProject(canonical);
     const recent = await readJson<string[]>(recentPath(), []);
     await writeJson(recentPath(), [canonical, ...recent.filter((item) => item !== canonical)].slice(0, 8));
     return { projectPath: canonical, profile, trustRequired: true };
   });
-  ipcMain.handle('run:start', async (_event, input: { projectPath: unknown; target?: unknown; trusted?: unknown; timeoutMs?: unknown }) => {
-    const projectPath = assertProjectPath(input?.projectPath);
-    if (input?.trusted !== true) throw new Error('Trust acknowledgement is required before executing project code.');
+  ipcMain.handle('run:start', async (_event, rawInput: unknown) => {
+    const input = validateRunInput(rawInput);
+    const projectPath = input.projectPath;
+    try {
+      const stat = await fs.stat(projectPath);
+      if (!stat.isDirectory()) throw new Error('Selected project path is not a directory.');
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Selected project path is not a directory.') throw error;
+      throw new Error('Selected project directory does not exist or is not accessible.');
+    }
     const runId = randomUUID();
     const workerPath = path.join(__dirname, '../worker/verify.js');
     const worker = fork(workerPath, [], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
@@ -90,32 +95,41 @@ function registerIpc(): void {
     worker.on('exit', (code) => {
       if (code !== 0 && runs.has(runId) && !runs.get(runId)?.report) send({ type: 'error', runId, message: `Verification worker exited with code ${code ?? 'unknown'}.` });
     });
-    worker.send({ runId, projectPath, target: typeof input?.target === 'string' ? input.target : undefined, timeoutMs: typeof input?.timeoutMs === 'number' ? input.timeoutMs : settingsCache.defaultTimeoutMs, cleanWorkspace: settingsCache.cleanWorkspace });
+    worker.send({ runId, projectPath, target: input.target, timeoutMs: input.timeoutMs ?? settingsCache.defaultTimeoutMs, cleanWorkspace: settingsCache.cleanWorkspace });
     return runId;
   });
-  ipcMain.handle('run:cancel', async (_event, runId: unknown) => { assertRun(runId).worker?.send({ type: 'cancel' }); });
+  ipcMain.handle('run:cancel', async (_event, runId: unknown) => {
+    const run = assertRun(runId);
+    if (run.cancelling) return;
+    run.cancelling = true;
+    run.worker?.send({ type: 'cancel' });
+    setTimeout(() => {
+      if (run.worker && !run.worker.killed) run.worker.kill();
+    }, 5000).unref();
+  });
   ipcMain.handle('settings:get', async () => settingsCache);
-  ipcMain.handle('settings:update', async (_event, patch: Partial<DesktopSettings>) => {
-    if (!patch || typeof patch !== 'object') throw new Error('Settings update must be an object.');
-    if (patch.theme !== undefined && !['system', 'dark', 'light'].includes(patch.theme)) throw new Error('Unknown theme.');
-    if (patch.cleanWorkspace !== undefined && typeof patch.cleanWorkspace !== 'boolean') throw new Error('cleanWorkspace must be boolean.');
-    if (patch.defaultTimeoutMs !== undefined && !Number.isFinite(Number(patch.defaultTimeoutMs))) throw new Error('defaultTimeoutMs must be numeric.');
-    settingsCache = { ...settingsCache, ...patch, defaultTimeoutMs: Math.max(1000, Math.min(600000, Number(patch.defaultTimeoutMs ?? settingsCache.defaultTimeoutMs))) };
+  ipcMain.handle('settings:update', async (_event, rawPatch: unknown) => {
+    const patch = validateSettingsPatch(rawPatch);
+    settingsCache = {
+      theme: patch.theme ?? settingsCache.theme,
+      cleanWorkspace: patch.cleanWorkspace ?? settingsCache.cleanWorkspace,
+      defaultTimeoutMs: Math.max(1000, Math.min(600000, Number(patch.defaultTimeoutMs ?? settingsCache.defaultTimeoutMs))),
+    };
     await writeJson(settingsPath(), settingsCache);
     return settingsCache;
   });
   ipcMain.handle('recent:list', async () => readJson<string[]>(recentPath(), []));
   ipcMain.handle('recent:remove', async (_event, projectPath: unknown) => {
-    const value = assertProjectPath(projectPath);
+    const value = assertAbsoluteProjectPath(projectPath);
     const recent = (await readJson<string[]>(recentPath(), [])).filter((item) => item !== value);
     await writeJson(recentPath(), recent.slice(0, 8));
   });
   ipcMain.handle('artifact:open', async (_event, runId: unknown, kind: unknown) => {
     const run = assertRun(runId);
     if (!run.report) throw new Error('The verification report is not ready.');
-    if (kind !== 'html' && kind !== 'fix' && kind !== 'directory') throw new Error('Unknown artifact type.');
+    const artifactKind = validateArtifactKind(kind);
     const root = path.resolve(run.projectPath);
-    const target = kind === 'directory' ? path.join(root, '.releaseproof') : path.join(root, '.releaseproof', kind === 'html' ? 'report.html' : 'RELEASEPROOF_FIX.md');
+    const target = artifactKind === 'directory' ? path.join(root, '.releaseproof') : path.join(root, '.releaseproof', artifactKind === 'html' ? 'report.html' : 'RELEASEPROOF_FIX.md');
     await fs.access(target);
     if (target !== root && !target.startsWith(`${root}${path.sep}`)) throw new Error('Artifact path is outside the selected project.');
     if (kind === 'directory') await shell.openPath(target); else await shell.openPath(target);
@@ -123,8 +137,9 @@ function registerIpc(): void {
   ipcMain.handle('artifact:copy', async (_event, runId: unknown, findingId?: unknown) => {
     const report = assertRun(runId).report;
     if (!report) throw new Error('The verification report is not ready.');
-    const finding = typeof findingId === 'string' ? report.checks.find((check) => check.id === findingId) : undefined;
-    const text = finding ? `${finding.title}\n\n${finding.summary}\n\nClassification: ${finding.classification ?? 'not specified'}\nRemediation: ${finding.remediation ?? 'See evidence and retry verification.'}` : `ReleaseProof ${report.verdict}\nScore: ${report.score}/100\nEvidence coverage: ${Math.round(report.evidenceCoverage * 100)}%\n${report.checks.filter((check) => check.status === 'block' || check.status === 'unknown' || check.status === 'warn').map((check) => `- ${check.id}: ${check.title} — ${check.summary}`).join('\n')}`;
+    const text = typeof findingId === 'string'
+      ? generateFindingHandoffMarkdown(report, findingId)
+      : generateAiHandoffMarkdown(report);
     clipboard.writeText(text);
   });
 }
@@ -140,9 +155,15 @@ app.on('before-quit', (event) => {
   quitting = true;
   event.preventDefault();
   for (const run of runs.values()) {
+    run.cancelling = true;
     if (run.worker?.connected) run.worker.send({ type: 'cancel' });
   }
   // Do not keep the application alive indefinitely if a child is wedged.
-  setTimeout(() => app.exit(0), 3000).unref();
+  setTimeout(() => {
+    for (const run of runs.values()) {
+      if (run.worker && !run.worker.killed) run.worker.kill();
+    }
+    app.exit(0);
+  }, 5000).unref();
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

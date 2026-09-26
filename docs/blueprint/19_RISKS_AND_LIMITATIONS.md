@@ -17,7 +17,7 @@ ReleaseProof can provide strong, scoped evidence, not mathematical proof that a 
 
 ## Current specific risks to track
 
-At blueprint snapshot, Core fixes after `c371dea` are dirty and untested as a whole; previous CI cannot certify them. `hackathon-starter` has an unresolved delayed HTTP timeout. FastAPI old pins exercise missing MSVC/unsupported uvloop rather than complete runtime. No Desktop/installer exists. Current CLI Doctor ends with a generic readiness line, and current report schema lacks independent schema version. Existing `--skip-sandbox` label can mislead about security isolation. `action-example.yml` references future `v0.2.0`; do not present it as currently published. The PR template still says 36 fixtures while prior CI used 42. These are facts/gaps to recheck and resolve or document in implementation, not permission to alter source during blueprint stage.
+At blueprint snapshot, Core and Desktop changes are committed at `29b700f`, but the final Desktop E2E/parity, installed-app verification and full schema-v1 contract remain unverified. `hackathon-starter` has an unresolved delayed HTTP timeout. FastAPI old pins exercise missing MSVC/unsupported uvloop rather than complete runtime. Current report schema has useful product-version/cancellation fields but still needs an independent schema version and migration policy. Existing `--skip-sandbox` label can mislead about security isolation. `action-example.yml` references future `v0.2.0`; do not present it as currently published. The PR template still says 36 fixtures while current benchmark uses 42. These are facts/gaps to recheck and resolve or document in implementation, not permission to alter source during blueprint stage.
 
 ## Risk management rule
 

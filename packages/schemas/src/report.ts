@@ -22,7 +22,34 @@ export const BrowserVerificationStatusSchema = z.enum([
 ]);
 export type BrowserVerificationStatus = z.infer<typeof BrowserVerificationStatusSchema>;
 
+/**
+ * The report contract is versioned independently from the application.  Keep
+ * this deliberately small and additive: consumers can render the known
+ * capability keys while preserving unknown future keys from the JSON file.
+ */
+export const ReportCapabilityStatusSchema = z.enum([
+  'verified',
+  'unavailable',
+  'failed',
+  'skipped',
+  'not_applicable',
+]);
+
+export const ReportCapabilitySchema = z.object({
+  status: ReportCapabilityStatusSchema,
+  reason: z.string().optional(),
+});
+
+export const ReportCapabilitiesSchema = z.record(ReportCapabilitySchema).default({});
+
+export const ReportCleanupSchema = z.object({
+  status: z.enum(['clean', 'failed', 'cancelled']).default('clean'),
+  errors: z.array(z.string()).default([]),
+}).default({ status: 'clean', errors: [] });
+
 export const VerificationReportSchema = z.object({
+  // Optional on input for backwards-compatible readers; Core always emits it.
+  schemaVersion: z.string().optional(),
   id: z.string(),
   version: z.string().default('0.2.0-dev.0'),
   runStatus: VerificationRunStatusSchema.default('completed'),
@@ -47,6 +74,10 @@ export const VerificationReportSchema = z.object({
     status: BrowserVerificationStatusSchema,
     reason: z.string().optional(),
   }).default({ status: 'SKIPPED' }),
+  /** Capability is intentionally separate from verdict: unavailable evidence
+   * is not an application failure and must remain visible to every consumer. */
+  capabilities: ReportCapabilitiesSchema.optional(),
+  cleanup: ReportCleanupSchema.optional(),
   checks: z.array(CheckResultSchema),
   durationMs: z.number(),
   artifactsDir: z.string(),

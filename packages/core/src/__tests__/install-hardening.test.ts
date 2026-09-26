@@ -17,6 +17,7 @@ describe('install failure classification', () => {
   it('recognizes missing POSIX and Rust build toolchains', () => {
     expect(isMissingNativeToolchain("error: command 'gcc' failed: No such file or directory")).toBe(true);
     expect(isMissingNativeToolchain('error: Rust compiler not found')).toBe(true);
+    expect(isMissingNativeToolchain('maturin failed to build wheel for pydantic-core')).toBe(true);
   });
 
   it('does not hide ordinary dependency or application failures', () => {

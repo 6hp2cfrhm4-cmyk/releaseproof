@@ -68,7 +68,7 @@ jobs:
         run: pnpm run bench
 
       - name: Run Authoritative Benchmark Suite (Primary Matrix)
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '20.x'
+        if: (matrix.os == 'ubuntu-latest' || matrix.os == 'windows-latest') && matrix.node-version == '20.x'
         env:
           RELEASEPROOF_BENCH_MODE: AUTHORITATIVE
         run: pnpm run bench
@@ -112,6 +112,30 @@ jobs:
           test -n "$STATUS"
           test -n "$SCORE"
           test -f "$REPORT"
+      - name: Action policy allows a verified blocker when configured
+        id: blocker-allowed
+        uses: ./
+        with:
+          path: fixtures/express-production-crash
+          timeout: '10000'
+          fail-on-blocker: 'false'
+      - name: Validate allowed blocker output
+        shell: bash
+        env:
+          STATUS: ${{ steps.blocker-allowed.outputs.status }}
+        run: test "$STATUS" = "NOT_READY"
+      - name: Action policy allows incomplete capability when configured
+        id: incomplete-allowed
+        uses: ./
+        with:
+          path: fixtures/env-blocked-postgres
+          timeout: '10000'
+          fail-on-incomplete: 'false'
+      - name: Validate allowed incomplete output
+        shell: bash
+        env:
+          STATUS: ${{ steps.incomplete-allowed.outputs.status }}
+        run: test "$STATUS" = "INCOMPLETE"
 
   tarball-e2e:
     name: Bundled CLI Tarball E2E

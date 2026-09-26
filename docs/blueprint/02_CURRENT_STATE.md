@@ -1,40 +1,59 @@
-# Current state snapshot — 2026-09-26
+# Current repository state — 2026-09-27
 
-This is a read-only inspection of the actual checkout. It is **not** a fresh full test of its uncommitted changes. Revalidate before implementation and before any readiness claim.
+This is the baseline for the next implementation/review stage. It is a dated, evidence-labelled snapshot, not a substitute for rerunning the commands on the final source SHA. The target blueprint remains normative; this file records what is actually present now.
 
-## Git and GitHub
+## Git and GitHub — VERIFIED
 
 | Item | Observed state |
 | --- | --- |
-| Branch / HEAD | `codex/core-hardening-before-desktop` / `c371dea505f32df07e25ae5b4f271f9b47fd69ef` |
-| Previous main | `4a742634478e89850b19731826277dac254f4876` |
-| Recent hardening commit | `c371dea Harden ReleaseProof core verification before desktop`; no later committed changes on this branch at inspection |
-| Remote | `origin` points to `https://github.com/6hp2cfrhm4-cmyk/releaseproof.git` (verify again before push) |
-| Worktree | one listed worktree at `C:/Users/alex/Desktop/megaproekt/RealiseProof` |
-| PR | [draft #1](https://github.com/6hp2cfrhm4-cmyk/releaseproof/pull/1), head `c371dea`, base `main`, open |
-| Historical release | `v0.1.0` tag and GitHub Release exist; immutable under this blueprint |
-| Working tree | dirty: 14 modified tracked files plus 3 untracked test files before these blueprint documents; **preserve them** |
+| Branch / HEAD | `codex/core-hardening-before-desktop` / `29b700f8e1fb057982aee11191e4f2e51ea26455` |
+| Worktree | clean; `git status --short --branch` reports the branch tracking `origin/codex/core-hardening-before-desktop` with no local changes |
+| Remote | `origin` = `https://github.com/6hp2cfrhm4-cmyk/releaseproof.git` |
+| PR | draft PR #1, `Core hardening before desktop`, base `main`, head `29b700f`, open |
+| Tag/release | historical `v0.1.0` exists and is not to be moved or replaced |
+| Worktrees | one worktree at `C:/Users/alex/Desktop/megaproekt/RealiseProof` |
+| Recent commits | `29b700f` CI policy/FAST timeout; `ea03d8e` Desktop typecheck; `c22c0cc` verifier hardening + Desktop; `c371dea` Core hardening before Desktop |
 
-Dirty tracked paths at inspection: `docs/REAL_WORLD_VALIDATION.md`, core install/startup tests, core build/external-services/install/readme/startup/engine, detector test/frameworks, security test/secret-scanner, `vitest.config.ts`. Untracked tests: `packages/core/src/__tests__/external-services.test.ts`, `readme-context.test.ts`, `runtime-evidence.test.ts`. Their content addresses current corpus findings but has **not** been included in CI run below. Do not reset or silently commit them with unrelated work.
+The development branch was explicitly authorized for CI push. That authorization does not authorize merge, tag movement, npm publication or a GitHub Release.
 
-## Architecture actually present — VERIFIED by file inspection
+## Repository architecture — VERIFIED by current files
 
-`apps/cli` (Commander, bundled ESM via esbuild) → `packages/core/src/engine.ts` → `detector`, clean-copy `sandbox`, `runner`, `browser`, `environment`, `security`, `schemas`; `reporter` formats terminal/HTML/AI output. Root workspace uses pnpm lockfile v9 and package version `0.2.0-dev.0`; Node package declares `>=20`. `apps/desktop` and Electron dependencies/config, renderer, preload, utility worker, installer config and setup `.exe` are **absent**. The existing `packages/sandbox` is a clean-copy implementation, not OS isolation. Root `pnpm run lint` is TypeScript `--noEmit`, not an ESLint policy. `packages/browser` uses Playwright with HTTP fallback. The CLI has default verify plus explicit `verify`, `doctor`, `report`, `vibe`, `clean`; current flags include `--ci`, `--json`, `--verbose`, `--timeout`, `--port`, `--python-interpreter`, `--skip-sandbox`.
+- Root is a private pnpm workspace (`pnpm-lock.yaml` v9) with `packages/*`, `apps/*` and `benchmarks`; product version is `0.2.0-dev.0`, Node engine is `>=20`.
+- CLI: `apps/cli/src/index.ts` and `commands/{verify,doctor,report,vibe,clean}.ts`; it invokes `@releaseproof/core` and the reporter. The default command is the verify alias.
+- Core packages: `schemas`, `detector`, `runner`, `sandbox` (clean copy), `browser` (Playwright + HTTP crawler), `environment`, `security`, `core`, and `reporter`.
+- Desktop now exists at `apps/desktop`: Electron main (`src/main/main.ts`), preload (`src/preload/index.ts`), renderer (`src/renderer/main.tsx` + CSS), forked worker (`src/worker/verify.ts`), shared DTOs (`src/shared/ipc.ts`), Vite and electron-builder configuration. The worker calls `@releaseproof/core`; no second verifier is intended.
+- Desktop has `nodeIntegration:false`, `contextIsolation:true`, `sandbox:true`, a CSP in the renderer HTML, deny-by-default navigation/window opening, folder picker, detection preview, trust acknowledgement, recent paths, settings, progress, cancel, result, findings/evidence/log views and artifact/clipboard actions. These are code-presence observations, not complete UX/E2E proof.
+- Windows packaging configuration produces `ReleaseProof-Setup-${version}.exe`, Start Menu shortcut and uninstall metadata. Installer packaging exists; installed metadata/icon inspection and full installed-app verification remain gates.
+- `action.yml` is a repository-local composite Action that builds the checked-out repository, runs the bundled CLI and writes declared outputs. It is not an npm dependency.
 
-Current report schema is unversioned as a schema (it has a product `version` field), and uses verdict `READY | NOT_READY | INCOMPLETE`, check status `pass | warn | block | unknown | skipped | not_applicable`, four failure classifications, and browser capability `VERIFIED | HTTP_FALLBACK | UNAVAILABLE | SKIPPED`. The authoritative benchmark runner reads `fixtures/*/expected.json`; FAST skips the clean copy, AUTHORITATIVE does not. There were 42 fixture directories at this inspection, matching the prior CI count; their current outcomes must be rerun at gate time. The GitHub Action builds the checked-out action repository locally and writes declared outputs. These observations do not prove the current dirty tree still works.
+## Local evidence — VERIFIED for this checkout where stated
 
-## Test and CI evidence — VERIFIED only for named SHA
+- `pnpm run build` and `pnpm run lint` completed successfully on this checkout during this blueprint pass.
+- Prior same-checkout verification recorded `pnpm test`: 22 files, 77 passed, 1 skipped; the fresh 2026-09-27 rerun is **not green**: 22 files, 74 passed, 3 failed, 1 skipped. Failures are `critical-routes.test.ts` (missing expected `metadata.api`), one CLI flag/config E2E (fixture server did not become ready), and one browser 500 test timeout. Treat these as current P0/P1 investigation gates. A deliberately supplied unsupported Vitest reporter flag is not a test result and must not be cited as one.
+- Prior same-checkout authoritative benchmark recorded 42 fixtures, TP 13, TN 29, FP 0, FN 0, zero expectation mismatches/errors and six external-dependency cases using explicit Python 3.12.14. The fresh Windows rerun on this checkout completed with **TP 11, TN 28, FP 1, FN 2, three expectation mismatches, eight external cases** in 918.5 seconds and therefore fails the release gate. The three mismatches are `fastapi-env-error` and `fastapi-missing-dependency` (expected NOT_READY, observed INCOMPLETE) and `fastapi-working` (expected READY, observed NOT_READY). CI Ubuntu Node 20 still passed its 42-fixture gate; the platform divergence is unresolved and must not be hidden.
+- Local Windows installer smoke recorded silent install/uninstall exit 0, installed executable launch without system Node/pnpm, and SHA-256 `251c126ede279b0030e17b09567229674cbe58d0b450f952601b768b665edebe` for `ReleaseProof-Setup-0.2.0-dev.0.exe`. This does not prove icon/version metadata or project verification from the installed app.
+- Several `releaseproof-*` directories remain under the user temp directory from earlier diagnostics. They are outside the repository and were deliberately not deleted during this read-only blueprint pass; final lifecycle acceptance must distinguish pre-existing residue from residue created by the final run and verify success/failure/cancel cleanup.
 
-[CI run 35876959495](https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/runs/35876959495) succeeded for **`c371dea`**: Windows/Ubuntu/macOS × Node 20/22, Action E2E, and bundled CLI tarball E2E. The prior authoritative Ubuntu run reported 42 fixtures, TP 13, TN 29, FP 0, FN 0, six external cases. The previous local Windows pass reported build/lint and 56 passing tests with one POSIX-only SIGINT skip; this is historical evidence supplied by the prior hardening work, not a rerun on current files. CI currently has no Desktop build, Desktop E2E or installer gate. The `v0.1.0` published tarball was separately smoke-tested in prior work, but it is not the development build.
+## Remote CI — VERIFIED status at snapshot time
 
-## Real-world corpus — current document is uncommitted, not CI evidence
+Run `36272677692` targets this exact SHA and completed successfully: <https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/runs/36272677692>. Desktop installer smoke, CLI tarball E2E, Action E2E and all six Windows/Ubuntu/macOS × Node 20/22 jobs passed. Ubuntu Node 20 authoritative benchmark reported 42 fixtures, TP 13, TN 29, FP 0, FN 0, zero mismatches/errors and six external cases in 345.4 seconds. Earlier run `36272111888` failed for an empty Desktop Vitest suite, expected monorepo-root exit 2 and a Windows FastAPI timeout; commits `ea03d8e` and `29b700f` address those specific failures.
 
-The user approved new pinned SHAs for six upstream-unreachable historical pins while preserving old expectations separately. The dirty `docs/REAL_WORLD_VALIDATION.md` records ten Windows runs: 3 READY, 1 NOT_READY, 6 INCOMPLETE. READY: leerob/site, vitesse-lite, node-express-realworld. NOT_READY: vite-plugin-inspect upstream Windows build failure. INCOMPLETE: Next-js-boilerplate, taxonomy, hackathon-starter, fastapi-realworld, fastapi-microservices, todomvc. Exact pins, toolchain and caveats are copied into [13](13_BENCHMARK_AND_REAL_WORLD.md); these are **observed working-tree notes**, pending independent rerun on finalized code. An npm registry timeout recovered on retry; hackathon-starter's delayed HTTP timeout cause remains unresolved; old FastAPI dependency needs MSVC; `uvloop` pin is Windows-incompatible.
+The matrix currently includes six OS/Node cells, Action E2E, CLI tarball E2E and a Windows Desktop build/installer artifact job. Full installed-app E2E, Desktop parity, IPC/lifecycle tests and a release-candidate Windows authoritative benchmark are still target gates, not implied by the green jobs above.
 
-## Known work and gaps
+## Real-world corpus — VERIFIED as historical working-tree record, not final gate
 
-The dirty diff attempts to classify incompatible pnpm lockfiles/ignored builds/Windows `uvloop`, missing required env/Drizzle Postgres URL, live-server delayed timeout, Express source-declared port, nested README `cd`, generic `.env` false secrets, and static-only monorepo root false READY. It also excludes ignored `.temp` from Vitest discovery. **EXPECTED, not verified:** full lint/test/authoritative benchmark and new CI after these edits. Additional design gaps to solve: explicit cancellation API instead of `process.exit` signal hooks inside Core; bounded logs/output and worker streaming; route typing and coverage; versioned report; Desktop; packaged-app verification; clear Doctor result instead of unconditional “ready”; release provenance. Possible code-review concerns, not confirmed defects: broad string-based command parsing, root route default for APIs, `skipSandbox` naming, and shell-based report opener. See [04](04_CORE_VERIFIER_SPEC.md), [06](06_CLI_SPEC.md), [10](10_SECURITY_PRIVACY.md), [19](19_RISKS_AND_LIMITATIONS.md).
+`docs/REAL_WORLD_VALIDATION.md` records ten dated Windows runs using exact pins: three READY, one NOT_READY and six INCOMPLETE. Four historical pins remained reachable; six were refreshed to new pinned SHAs with the user's approval. Historical and refreshed pins are explicitly separated. The record is useful diagnostic evidence, but it must be rerun or marked NOT VERIFIED on the final implementation SHA with toolchain/date/target/capability evidence. The unresolved `hackathon-starter` delayed HTTP timeout remains a limitation rather than a guessed blocker.
 
-## Evidence labels for the implementation agent
+## Known incomplete gates — EXPECTED / NOT VERIFIED
 
-**VERIFIED:** file structure, present schemas/commands, PR/CI status for `c371dea`, dirty paths, absence of Desktop. **NOT VERIFIED:** any full-suite or CI outcome for current dirty tree, executable setup installer, Desktop/CLI parity, packaged Desktop launch. **EXPECTED:** all contracts in this blueprint. Do not promote the historical green CI run to evidence for new changes.
+- Desktop has implementation code but lacks a complete automated Electron E2E and five-case CLI/Desktop parity suite.
+- Worker/main lifecycle needs real tests for close, worker crash, cancellation, force cleanup, event bounds and foreign-port safety. Current `before-quit` has a bounded exit fallback; it is not proof that every child is reaped.
+- Current report schemas contain useful fields and cancellation/blocker invariants, but the independent `schemaVersion: 1.0.0` contract, migration policy, artifact hashes and full evidence/capability model still need completion.
+- Current Desktop `System Doctor`, evidence/log presentation and finding copy are functional scaffolds; target behavior in [07](07_DESKTOP_PRODUCT_SPEC.md) is broader than current code.
+- Action currently exposes `path`, `port`, `timeout` and `fail-on-blocker`; target `target`/`fail-on-incomplete` validation and healthy/blocker/incomplete/path-space E2E remain required.
+- Windows installer CI currently builds and hashes an artifact; it does not yet install, launch a project verification, inspect metadata/icon, or uninstall in CI.
+- The release remains development-only. Stage C review, new immutable version/tag, downloaded-artifact verification and public release are out of scope here.
+
+## Evidence rule
+
+`VERIFIED` means directly observed in this checkout or linked to a named run/SHA. `INFERRED` means a design conclusion from inspected code. `NOT VERIFIED` means an explicit missing gate. `EXPECTED` means the future contract in files 00–20. Never promote code presence, a prior commit's CI or a partial installer smoke into a final readiness claim.

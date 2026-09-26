@@ -21,6 +21,13 @@ inputs:
     description: 'Fail the action step if verification discovers any blockers'
     required: false
     default: 'true'
+  fail-on-incomplete:
+    description: 'Fail the action step when required verification capability is unavailable'
+    required: false
+    default: 'true'
+  target:
+    description: 'Optional runnable target relative path inside a monorepo'
+    required: false
 
 outputs:
   score:
@@ -58,6 +65,8 @@ runs:
         INPUT_PORT: ${{ inputs.port }}
         INPUT_TIMEOUT: ${{ inputs.timeout }}
         INPUT_FAIL_ON_BLOCKER: ${{ inputs.fail-on-blocker }}
+        INPUT_FAIL_ON_INCOMPLETE: ${{ inputs.fail-on-incomplete }}
+        INPUT_TARGET: ${{ inputs.target }}
       run: |
         set -uo pipefail
         ARGS=(verify "$INPUT_PATH" --ci)
@@ -66,6 +75,9 @@ runs:
         fi
         if [ -n "$INPUT_TIMEOUT" ]; then
           ARGS+=(--timeout "$INPUT_TIMEOUT")
+        fi
+        if [ -n "$INPUT_TARGET" ]; then
+          ARGS+=(--target "$INPUT_TARGET")
         fi
 
         pnpm install --dir "$GITHUB_ACTION_PATH" --frozen-lockfile
@@ -80,6 +92,13 @@ runs:
           node "$GITHUB_ACTION_PATH/scripts/write-action-results.mjs" "$REPORT_JSON"
         fi
 
-        if [ "$EXIT_CODE" -eq 3 ] || { [ "$INPUT_FAIL_ON_BLOCKER" = "true" ] && [ "$EXIT_CODE" -ne 0 ]; }; then
+        # The CLI always preserves its documented exit code. The Action's
+        # policy is intentionally separate: a blocker and an unavailable
+        # capability can be allowed independently while internal errors never
+        # become a green step.
+        if [ "$EXIT_CODE" -eq 3 ] || \
+           { [ "$EXIT_CODE" -eq 1 ] && [ "$INPUT_FAIL_ON_BLOCKER" = "true" ]; } || \
+           { [ "$EXIT_CODE" -eq 2 ] && [ "$INPUT_FAIL_ON_INCOMPLETE" = "true" ]; } || \
+           [ "$EXIT_CODE" -eq 130 ]; then
           exit $EXIT_CODE
         fi

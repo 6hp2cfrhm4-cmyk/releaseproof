@@ -20,7 +20,7 @@ Each phase has an entry gate, owned paths/components, work, tests and exit evide
 
 ## Phase 4 — Desktop infrastructure
 
-**Entry:** Core schema/events stable. **Work:** add `apps/desktop` Electron main/preload/renderer/worker, typed validated IPC, CSP/security settings, app state/recent/settings, folder dialog, worker cancellation and artifact open. No duplicate verification logic. **Tests:** IPC validation, worker crash, cancel/close process cleanup, shared Core parity fixture. **Exit:** development Desktop launches and verifies one real safe fixture through main→worker→Core, with no renderer Node access. Dependencies: Phases 1–2.
+**Entry:** Core schema/events stable; current `apps/desktop` baseline may be retained. **Work:** harden the existing Electron main/preload/renderer/worker rather than creating a second verifier: typed runtime-validated IPC, CSP/security settings, app state/recent/settings, folder dialog, worker cancellation, artifact open and bounded event/log transport. No duplicate verification logic. **Tests:** IPC validation, worker crash, cancel/close process cleanup, shared Core parity fixture. **Exit:** development Desktop launches and verifies one real safe fixture through main→worker→Core, with no renderer Node access and an evidence-backed cleanup path. Dependencies: Phases 1–2.
 
 ## Phase 5 — Desktop UX and accessibility
 
@@ -28,7 +28,7 @@ Each phase has an entry gate, owned paths/components, work, tests and exit evide
 
 ## Phase 6 — packaging and distribution preparation
 
-**Entry:** Desktop flow stable. **Work:** builder config, icon/version metadata, setup EXE, Start Menu/uninstall, embedded runtime and worker assets; CLI tarball/checksums; package license/asset audit. **Components:** `apps/desktop` packaging files, root scripts, `scripts/generate-sha256s.mjs`. **Tests:** actual installed Windows app on clean environment, verify safe fixture and uninstall; packed CLI outside repo. **Exit:** development `ReleaseProof-Setup-<version>.exe` exists as CI artifact with hash and installed-app evidence. No GitHub Release. Dependencies: Phase 5.
+**Entry:** Desktop flow stable. **Work:** finish the existing builder config, icon/version metadata, setup EXE, Start Menu/uninstall, embedded runtime and worker assets; CLI tarball/checksums; package license/asset audit. **Components:** `apps/desktop` packaging files, root scripts, `scripts/generate-sha256s.mjs`. **Tests:** actual installed Windows app on clean environment, verify safe fixture and uninstall; packed CLI outside repo. **Exit:** development `ReleaseProof-Setup-<version>.exe` exists as CI artifact with hash and installed-app evidence. No GitHub Release. Dependencies: Phase 5.
 
 ## Phase 7 — CI/Action integration
 

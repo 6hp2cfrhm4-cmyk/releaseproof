@@ -4,7 +4,7 @@ Check an item only with a link to test/run/artifact or a precise local command/r
 
 ## Baseline and source integrity
 
-- [ ] Read all 21 blueprint files, inspect current branch/HEAD/status/PR/CI, preserve pre-existing dirty Core work.
+- [ ] Read all 21 blueprint files, inspect current branch/HEAD/status/PR/CI, preserve all valid existing Core/Desktop work and document any user-origin changes.
 - [ ] Record final source SHA, worktree status, `v0.1.0` tag/release/assets unchanged; no PR merge or public release.
 - [ ] Frozen install, build and full typecheck/lint pass; exact test files/cases/skips recorded.
 - [ ] Every P0/P1 ID in [17](17_ACCEPTANCE_CRITERIA.md) has implementation + evidence or explicit blocking reason.

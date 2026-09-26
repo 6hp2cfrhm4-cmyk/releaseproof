@@ -20,7 +20,7 @@ Main owns directory picker (`openDirectory`), recent-project store, theme/settin
 
 ## Build and packaging
 
-`apps/desktop` is a new pnpm workspace package with separate main/preload/renderer builds, worker bundle and explicit asset allowlist. Package includes Electron runtime, shared Core/CLI-independent dependencies, Playwright integration strategy and license notices. Choose one tested builder (e.g. electron-builder NSIS); pin builder version in lockfile during implementation, not in this blueprint stage. `asar` layout must permit worker execution and any native/runtime assets; test the **installed** app, not just Vite dev. Installer requirements in [14](14_CI_CD_AND_RELEASE.md). All binaries/signing claims must be evidenced; unsigned development installer may show SmartScreen warning and must be labeled accordingly.
+`apps/desktop` is now a pnpm workspace package with separate main/preload/renderer builds, a forked worker and an electron-builder NSIS configuration. The current code is an implementation baseline, not completion: worker event schemas, IPC runtime validation, bounded streams, packaged browser strategy, license notices and installed-app E2E still need to meet this contract. Package includes Electron runtime and shared Core/CLI-independent dependencies. Pin builder versions in the lockfile and keep an explicit asset allowlist. `asar` layout must permit worker execution and any native/runtime assets; test the **installed** app, not just Vite dev. Installer requirements in [14](14_CI_CD_AND_RELEASE.md). All binaries/signing claims must be evidenced; unsigned development installer may show SmartScreen warning and must be labeled accordingly.
 
 ## Parity invariant
 

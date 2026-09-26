@@ -14,6 +14,8 @@ if (!reportPath || !process.env.GITHUB_OUTPUT) {
     `- **Score**: ${report.score} / 100`,
     `- **Blockers**: ${report.counts?.blockers ?? 0}`,
     `- **Warnings**: ${report.counts?.warnings ?? 0}`,
+    `- **Unknown / incomplete checks**: ${report.counts?.unknown ?? 0}`,
+    `- **Evidence coverage**: ${Math.round((report.evidenceCoverage ?? 0) * 100)}%`,
     '',
   ].join('\n');
   if (process.env.GITHUB_STEP_SUMMARY) {

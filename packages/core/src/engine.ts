@@ -167,6 +167,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
 
   let runningService: any = null;
   let runStatus: VerificationReport['runStatus'] = 'completed';
+  const cleanupErrors: string[] = [];
   let activePort = config.start?.port || profile.ports[0] || 3000;
   const browserDisabled = config.checks?.browser === false || config.browser?.enabled === false;
   let browserVerification: VerificationReport['browserVerification'] = browserDisabled
@@ -369,6 +370,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
       try {
         await fs.rm(pythonRuntimeDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
       } catch (cleanupError: unknown) {
+        cleanupErrors.push(cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
         allChecks.push({
           id: 'python-runtime-cleanup-error',
           title: 'Python runtime cleanup failed',
@@ -384,6 +386,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     try {
       await workspace.dispose();
     } catch (cleanupError: unknown) {
+      cleanupErrors.push(cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
       allChecks.push({
         id: 'workspace-cleanup-error',
         title: 'Temporary workspace cleanup failed',
@@ -428,6 +431,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
   const relFixPath = path.posix.join(relArtifactsDir, 'RELEASEPROOF_FIX.md');
 
   const rawReport: VerificationReport = {
+    schemaVersion: '1.0.0',
     id: reportId,
     version: '0.2.0-dev.0',
     runStatus,
@@ -445,6 +449,11 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     counts: scoreResult.counts,
     checks: allChecks,
     browserVerification,
+    capabilities: buildCapabilitySummary(allChecks, browserVerification, profile.capabilities),
+    cleanup: {
+      status: runStatus === 'cancelled' ? 'cancelled' : cleanupErrors.length > 0 ? 'failed' : 'clean',
+      errors: cleanupErrors,
+    },
     durationMs,
     artifactsDir: relArtifactsDir,
     jsonReportPath: relJsonPath,
@@ -459,6 +468,42 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
   await writeAtomicFile(absoluteJsonPath, JSON.stringify(report, null, 2));
 
   return report;
+}
+
+function buildCapabilitySummary(
+  checks: CheckResult[],
+  browserVerification: VerificationReport['browserVerification'],
+  profileCapabilities: { browser: boolean; api: boolean; docker: boolean },
+): Record<string, { status: 'verified' | 'unavailable' | 'failed' | 'skipped' | 'not_applicable'; reason?: string }> {
+  const statusFor = (category: CheckResult['category']) => {
+    const relevant = checks.filter((check) => check.category === category);
+    if (relevant.some((check) => check.status === 'block')) return { status: 'failed' as const };
+    if (relevant.some((check) => check.status === 'unknown')) {
+      const reason = relevant.find((check) => check.status === 'unknown')?.summary;
+      return { status: 'unavailable' as const, ...(reason ? { reason } : {}) };
+    }
+    if (relevant.some((check) => check.status === 'pass' || check.status === 'warn')) return { status: 'verified' as const };
+    return { status: 'skipped' as const };
+  };
+
+  return {
+    install: statusFor('install'),
+    build: statusFor('build'),
+    runtime: statusFor('runtime'),
+    http: statusFor('api'),
+    routes: statusFor('api'),
+    browser: profileCapabilities.browser
+      ? browserVerification.status === 'VERIFIED'
+        ? { status: 'verified' }
+        : browserVerification.status === 'SKIPPED'
+          ? { status: 'skipped', reason: browserVerification.reason }
+          : { status: 'unavailable', reason: browserVerification.reason }
+      : { status: 'not_applicable', reason: 'The detected target does not require a browser runtime.' },
+    environment: statusFor('environment'),
+    documentation: statusFor('documentation'),
+    security: statusFor('security'),
+    api: profileCapabilities.api ? statusFor('api') : { status: 'not_applicable', reason: 'No API capability was detected.' },
+  };
 }
 
 async function writeAtomicFile(target: string, content: string): Promise<void> {
@@ -489,13 +534,46 @@ async function preparePythonExecution(
 ): Promise<(PythonCommands & { ok: true; interpreter: string; environment: Record<string, string | undefined> }) | { ok: false; error: string }> {
   const candidates = explicitInterpreter
     ? [JSON.stringify(path.resolve(explicitInterpreter))]
-    : process.platform === 'win32' ? ['py -3', 'python'] : ['python3', 'python'];
+    // Prefer the interpreter selected by the host/toolchain (for example
+    // actions/setup-python) before the Windows launcher. Some developer
+    // machines expose an MSYS `python.exe` without pip; fall through to
+    // common Windows Store aliases rather than getting stuck on it.
+    : process.platform === 'win32'
+      ? [
+          'python', 'py -3', 'python3.13', 'python3.12', 'python3.11',
+          ...(process.env.LOCALAPPDATA
+            ? [path.join(process.env.LOCALAPPDATA, 'Microsoft', 'WindowsApps', 'python.exe')]
+            : []),
+        ]
+      : ['python3', 'python'];
   let lastError = 'No Python interpreter candidate succeeded.';
 
   for (const candidate of candidates) {
+    const interpreterProbe = await execCommand(`${candidate} -c "import sys; print(sys.executable)"`, {
+      cwd: workspaceDir,
+      timeoutMs: 10000,
+      env: baseEnvironment,
+      allowHostEnv,
+      signal,
+    });
+    if (interpreterProbe.exitCode !== 0) {
+      lastError = `${candidate} is not runnable: ${interpreterProbe.stderr.trim() || interpreterProbe.stdout.trim() || `exit ${interpreterProbe.exitCode}`}`;
+      continue;
+    }
+    const pipProbe = await execCommand(`${candidate} -m pip --version`, {
+      cwd: workspaceDir,
+      timeoutMs: 15000,
+      env: baseEnvironment,
+      allowHostEnv,
+      signal,
+    });
+    if (pipProbe.exitCode !== 0) {
+      lastError = `${candidate} does not provide pip: ${pipProbe.stderr.trim() || pipProbe.stdout.trim() || `exit ${pipProbe.exitCode}`}`;
+      continue;
+    }
     const result = await execCommand(`${candidate} -m venv ${JSON.stringify(venvDir)}`, {
       cwd: workspaceDir,
-      timeoutMs: 60000,
+      timeoutMs: 120000,
       env: baseEnvironment,
       allowHostEnv,
       signal,
@@ -524,6 +602,7 @@ async function preparePythonExecution(
         signal,
       });
       if (pipProbe.exitCode !== 0) {
+        await fs.rm(venvDir, { recursive: true, force: true }).catch(() => {});
         lastError = `${candidate} created a virtual environment whose pip is unusable: ${pipProbe.stderr.trim() || pipProbe.stdout.trim() || `exit ${pipProbe.exitCode}`}`;
         continue;
       }
@@ -554,6 +633,7 @@ async function preparePythonExecution(
       };
     }
     lastError = result.stderr.trim() || result.stdout.trim() || `${candidate} exited with ${result.exitCode}`;
+    await fs.rm(venvDir, { recursive: true, force: true }).catch(() => {});
   }
 
   return { ok: false, error: `Could not create workspace-local Python virtual environment: ${lastError}` };

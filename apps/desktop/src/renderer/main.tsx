@@ -12,6 +12,7 @@ function App() {
   const [trusted, setTrusted] = useState(false);
   const [runId, setRunId] = useState<string>();
   const [event, setEvent] = useState<RunEvent>();
+  const [eventLog, setEventLog] = useState<RunEvent[]>([]);
   const [settings, setSettings] = useState<DesktopSettings>({ theme: 'system', defaultTimeoutMs: 30000, cleanWorkspace: true });
   const [recent, setRecent] = useState<string[]>([]);
   const [error, setError] = useState<string>();
@@ -19,7 +20,10 @@ function App() {
   useEffect(() => {
     void window.releaseproof.getSettings().then(setSettings).catch((e) => setError(String(e)));
     void window.releaseproof.listRecent().then(setRecent).catch(() => {});
-    return window.releaseproof.subscribeRun(setEvent);
+    return window.releaseproof.subscribeRun((next) => {
+      setEvent(next);
+      setEventLog((items) => [...items, next].slice(-200));
+    });
   }, []);
   useEffect(() => { document.documentElement.dataset.theme = settings.theme; }, [settings.theme]);
 
@@ -38,7 +42,8 @@ function App() {
     if (!projectPath || !preview || !trusted) return;
     try {
       const id = await window.releaseproof.startVerification({ projectPath, trusted, timeoutMs: settings.defaultTimeoutMs });
-      setRunId(id); setEvent({ type: 'started', runId: id }); setView('overview');
+      const started: RunEvent = { type: 'started', runId: id };
+      setRunId(id); setEvent(started); setEventLog([started]); setView('overview');
     } catch (e) { setError(userError(e)); }
   }
   async function cancel() { if (runId) await window.releaseproof.cancelVerification(runId).catch((e) => setError(userError(e))); }
@@ -59,7 +64,7 @@ function App() {
       {view === 'overview' && <Overview report={report} event={event} cancel={cancel} verify={verify} copy={() => copy()} open={(kind: 'html' | 'fix' | 'directory') => runId && window.releaseproof.openArtifact(runId, kind).catch((e) => setError(userError(e)))} />}
       {view === 'findings' && <Findings report={report} copy={copy} />}
       {view === 'evidence' && <Evidence report={report} />}
-      {view === 'logs' && <Logs event={event} />}
+      {view === 'logs' && <Logs events={eventLog} />}
       {view === 'doctor' && <Doctor projectPath={projectPath} preview={preview} />}
       {view === 'settings' && <Settings settings={settings} update={async (patch) => setSettings(await window.releaseproof.updateSettings(patch))} />}
     </main>
@@ -73,7 +78,12 @@ function Home(props: { projectPath?: string; preview?: DetectionPreview; recent:
 function Overview({ report, event, cancel, verify, copy, open }: any) { if (!report) return <section className="screen"><Empty title={event?.type === 'progress' ? event.step : 'Ready to verify'} text="Choose a project, inspect its target, then start a run." /></section>; const incomplete = report.verdict === 'INCOMPLETE'; return <section className="screen"><div className={`verdict ${report.verdict.toLowerCase()}`}><div><div className="eyebrow">{report.runStatus === 'cancelled' ? 'NO SHIPPING VERDICT' : 'VERIFICATION RESULT'}</div><h2>{report.verdict === 'READY' ? 'READY TO SHIP' : report.verdict === 'NOT_READY' ? 'NOT READY TO SHIP' : incomplete ? 'VERIFICATION INCOMPLETE' : 'VERIFICATION CANCELLED'}</h2><p>{report.counts.blockers} blockers · {report.counts.warnings} warnings · {report.counts.unknown} unknown · {Math.round(report.evidenceCoverage * 100)}% evidence coverage</p></div><div className="score">{report.score}<small>/100</small></div></div><div className="action-row">{event?.type === 'progress' && <button className="danger-button" onClick={cancel}>Cancel</button>}<button className="primary-button" onClick={verify}>Verify Again</button><button onClick={copy}>Copy for AI</button><button onClick={() => open('html')}>Open HTML report</button><button onClick={() => open('fix')}>Open RELEASEPROOF_FIX.md</button></div><div className="summary-grid"><Metric label="Target" value={report.projectName} /><Metric label="Duration" value={`${(report.durationMs / 1000).toFixed(1)}s`} /><Metric label="Browser" value={report.browserVerification.status} /><Metric label="Findings" value={String(report.checks.length)} /></div></section>; }
 function Findings({ report, copy }: any) { return <section className="screen"><div className="section-heading"><div><div className="eyebrow">INSPECT</div><h2>Findings</h2></div><button onClick={() => copy()}>Copy all issues for AI</button></div>{report?.checks.map((check: any) => <article className={`finding ${check.status}`} key={check.id} onClick={() => copy(check.id)}><div className="finding-status">{check.status.toUpperCase()}</div><div><strong>{check.title}</strong><p>{check.summary}</p><small>{check.id} · {check.category} · {check.evidence?.length ?? 0} evidence item(s)</small></div></article>)}</section>; }
 function Evidence({ report }: any) { return <section className="screen"><div className="eyebrow">TRACEABILITY</div><h2>Evidence</h2>{report?.checks.flatMap((check: any) => (check.evidence ?? []).map((item: any, index: number) => <pre className="evidence" key={`${check.id}-${index}`}><span>{check.id} · {item.type}</span>{JSON.stringify(item, null, 2)}</pre>))}</section>; }
-function Logs({ event }: any) { return <section className="screen"><div className="eyebrow">LIVE OUTPUT</div><h2>Logs</h2><div className="log-box">{event?.type === 'progress' ? `[${event.status}] ${event.step}${event.message ? ` — ${event.message}` : ''}` : 'Sanitized verification logs appear here during a run.'}</div></section>; }
+function Logs({ events }: { events: RunEvent[] }) { return <section className="screen"><div className="eyebrow">LIVE OUTPUT</div><h2>Logs</h2><div className="log-box">{events.length === 0 ? 'Sanitized verification logs appear here during a run.' : events.map((item) => {
+  if (item.type === 'progress') return `[${item.status}] ${item.step}${item.message ? ` — ${item.message}` : ''}`;
+  if (item.type === 'error') return `[error] ${item.message}`;
+  if (item.type === 'finished') return `[done] ${item.report.verdict} · ${item.report.score}/100`;
+  return `[started] ${item.runId}`;
+}).join('\n')}</div></section>; }
 function Doctor({ projectPath, preview }: { projectPath?: string; preview?: DetectionPreview }) { return <section className="screen"><div className="eyebrow">SYSTEM CHECK</div><h2>System Doctor</h2>{!projectPath || !preview ? <p className="lede">Choose a project first to inspect its detected runtime requirements.</p> : <><p className="lede">Target: <code>{projectPath}</code></p><div className="summary-grid"><Metric label="Node" value={preview.profile.languages.some((item) => item === 'javascript' || item === 'typescript') ? 'Required' : 'Not required'} /><Metric label="Python" value={preview.profile.languages.includes('python') ? 'Required' : 'Not required'} /><Metric label="Browser" value={preview.profile.capabilities.browser ? 'Playwright capable' : 'HTTP/API checks'} /></div><p className="muted">Run `releaseproof doctor` for executable version probes and remediation guidance.</p></>}</section>; }
 function Settings({ settings, update }: { settings: DesktopSettings; update: (patch: Partial<DesktopSettings>) => Promise<void> }) { return <section className="screen"><div className="eyebrow">PREFERENCES</div><h2>Settings</h2><label className="setting-row">Theme<select value={settings.theme} onChange={(e) => void update({ theme: e.target.value as DesktopSettings['theme'] })}><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label><label className="setting-row">Default startup timeout (ms)<input type="number" min="1000" max="600000" value={settings.defaultTimeoutMs} onChange={(e) => void update({ defaultTimeoutMs: Number(e.target.value) })} /></label><label className="setting-row"><input type="checkbox" checked={settings.cleanWorkspace} onChange={(e) => void update({ cleanWorkspace: e.target.checked })} /> Use a disposable clean workspace</label></section>; }
 function Metric({ label, value }: { label: string; value: string }) { return <div className="metric"><span>{label}</span><strong>{value}</strong></div>; }

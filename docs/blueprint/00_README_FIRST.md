@@ -35,6 +35,8 @@ This directory is the implementation contract for the next milestone: one eviden
 | [19_RISKS_AND_LIMITATIONS](19_RISKS_AND_LIMITATIONS.md) | honest residual limitations |
 | [20_FINAL_CHECKLIST](20_FINAL_CHECKLIST.md) | final implementation gate |
 
+`99_IMPLEMENTATION_STATUS.md` is a supplemental, dated status ledger. It does not replace any numbered contract and is not part of the required 00–20 reading order.
+
 ## Execution order
 
 Follow [15_IMPLEMENTATION_ROADMAP](15_IMPLEMENTATION_ROADMAP.md) phase by phase, recording evidence against [17_ACCEPTANCE_CRITERIA](17_ACCEPTANCE_CRITERIA.md). The implementation agent may choose internal design details not fixed here, but must preserve externally visible contracts. A new requirement or unavoidable deviation needs a written rationale in its implementation report, corresponding tests, and review in Stage C. A green unit suite is not a substitute for the packaged-app and release gates.

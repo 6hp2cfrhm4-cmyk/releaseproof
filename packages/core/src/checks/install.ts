@@ -5,6 +5,9 @@ const MISSING_NATIVE_TOOLCHAIN_PATTERNS = [
   /Microsoft Visual C\+\+ [\d.]+ or greater is required/i,
   /(?:unable to execute|command)\s+['"`]*(?:cc|gcc|g\+\+|clang|clang\+\+)['"`]*.*(?:no such file|not found)/i,
   /(?:Rust compiler|rustc).*(?:not found|is required|could not be found)/i,
+  /(?:maturin|cargo).*(?:failed|not found|could not be found|is required)/i,
+  /failed building wheel for (?:pydantic-core|[A-Za-z0-9_.-]+)/i,
+  /Could not build wheels for [A-Za-z0-9_.-]+, which is required to install/i,
   /(?:CMake|ninja).*(?:not found|is required|could not be found)/i,
 ];
 

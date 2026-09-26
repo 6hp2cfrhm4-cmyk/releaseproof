@@ -30,6 +30,8 @@ export function generateAiHandoffMarkdown(report: VerificationReport): string {
   lines.push('```');
   lines.push('');
   lines.push(`**Status**: ${report.verdict}`);
+  lines.push(`**Report schema**: ${report.schemaVersion ?? '1.x legacy reader'}`);
+  lines.push(`**Project**: ${report.projectName} (${report.projectPath})`);
   lines.push(`**Score**: ${report.score} / 100`);
   lines.push(`**Evidence coverage**: ${Math.round(report.evidenceCoverage * 100)}%`);
   lines.push(`**Findings**: ${issues.length} (${report.counts.blockers} blockers, ${report.counts.warnings} warnings, ${report.counts.unknown || 0} external dependencies)`);
@@ -53,6 +55,7 @@ export function generateAiHandoffMarkdown(report: VerificationReport): string {
 
     // Evidence
     lines.push('### Verified Evidence');
+    lines.push(`Evidence ID: ${issue.id}`);
     if (issue.evidence && issue.evidence.length > 0) {
       lines.push('```');
       for (const ev of issue.evidence) {
@@ -107,7 +110,7 @@ export function generateAiHandoffMarkdown(report: VerificationReport): string {
 
     // Expected vs Observed
     lines.push('### Expected vs Observed');
-    lines.push(`- **Expected**: Normal execution with 0 errors, successful startup, and 200 HTTP responses.`);
+    lines.push(`- **Expected**: The selected verification contract completes without a demonstrated failure for this check. HTTP/API expectations are interpreted using the detected target and configured route scope; authentication, redirects and API success statuses are not assumed to be HTTP 200.`);
     lines.push(`- **Observed**: ${issue.summary}`);
     lines.push('');
 
@@ -144,4 +147,21 @@ export function generateCompactAiContext(report: VerificationReport): string {
   }
 
   return parts.join('\n');
+}
+
+/** Build the same sanitized handoff format for a single finding. */
+export function generateFindingHandoffMarkdown(report: VerificationReport, findingId: string): string {
+  const finding = report.checks.find((check) => check.id === findingId);
+  if (!finding) return generateAiHandoffMarkdown(report);
+  const checks = [finding];
+  const counts = {
+    total: 1,
+    passed: finding.status === 'pass' ? 1 : 0,
+    warnings: finding.status === 'warn' ? 1 : 0,
+    blockers: finding.status === 'block' ? 1 : 0,
+    unknown: finding.status === 'unknown' ? 1 : 0,
+    skipped: finding.status === 'skipped' ? 1 : 0,
+    notApplicable: finding.status === 'not_applicable' ? 1 : 0,
+  };
+  return generateAiHandoffMarkdown({ ...report, checks, counts });
 }

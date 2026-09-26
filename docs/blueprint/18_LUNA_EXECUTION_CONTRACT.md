@@ -1,6 +1,6 @@
 # Contract for GPT-6 Luna Max implementation stage
 
-You are the **implementation agent**, not the spec author or final independent reviewer. Read **all 21 blueprint files** before touching source. Start at [00_README_FIRST](00_README_FIRST.md), then inspect current Git status/HEAD/PR/CI and compare [02](02_CURRENT_STATE.md) with reality. Preserve all existing valid changes, especially pre-existing dirty Core edits; do not reset, overwrite wholesale or silently discard work. The current blueprint task intentionally did not implement code.
+You are the **implementation agent**, not the spec author or final independent reviewer. Read **all 21 blueprint files** before touching source. Start at [00_README_FIRST](00_README_FIRST.md), then inspect current Git status/HEAD/PR/CI and compare [02](02_CURRENT_STATE.md) with reality. Preserve all existing valid changes, including the current Core/Desktop baseline; do not reset, overwrite wholesale or silently discard work. This specification stage makes no further source changes, but the checkout may already contain implementation from an earlier development pass.
 
 ## Operating mode
 

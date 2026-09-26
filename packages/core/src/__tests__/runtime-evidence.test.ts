@@ -18,5 +18,9 @@ describe('minimum executable evidence', () => {
     const report = await verifyProject({ projectDir: root });
     expect(report.verdict).toBe('INCOMPLETE');
     expect(report.checks.find((check) => check.id === 'runtime-evidence-missing')?.status).toBe('unknown');
+    expect(report.schemaVersion).toBe('1.0.0');
+    expect(report.capabilities?.runtime.status).toBe('unavailable');
+    expect(report.capabilities?.browser.status).toBe('not_applicable');
+    expect(report.cleanup?.status).toBe('clean');
   });
 });

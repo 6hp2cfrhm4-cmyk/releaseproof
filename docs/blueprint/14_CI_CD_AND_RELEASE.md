@@ -1,12 +1,12 @@
 # CI, packaging, Action and release provenance
 
-This file describes future gates; current `.github/workflows/ci.yml` proves Core/CLI at `c371dea`, not Desktop or installer. Historical `v0.1.0` tag, release and assets are immutable.
+This file owns the future release gate and distinguishes it from evidence already present. Current `.github/workflows/ci.yml` at `29b700f` includes the six-cell Core/CLI matrix, Action E2E, CLI tarball E2E and a Windows Desktop build/installer smoke artifact. It does **not** yet prove installed-app verification, Desktop parity or the complete release gate. Historical `v0.1.0` tag, release and assets are immutable.
 
 ## Required CI topology
 
 **CI-MATRIX-001 · P0:** Required pull-request jobs: Windows/Ubuntu/macOS × Node 20/22 frozen monorepo install, full build, typecheck/lint, unit/integration/CLI E2E and FAST benchmark smoke. Chromium browser E2E on each OS where supported; failures cannot be hidden by `continue-on-error`. Python interpreter/venv tests required Windows + Ubuntu (macOS smoke desirable). `vitest.config.ts` excludes clones/generated dirs. Ubuntu Node 20 AUTHORITATIVE full benchmark is required; Windows authoritative full benchmark is required for release candidate because of observed Windows-specific corpus failures. A cross-platform Dogfood verification is smoke, not substitute for benchmark.
 
-**CI-DESKTOP-001 · P0:** Dedicated Desktop build/typecheck/component/IPC tests on matrix. Windows job builds `ReleaseProof-Setup-<development-version>.exe`, then installs and launches it on runner/VM, verifies a tiny project through actual main→worker→Core, checks report/copy/close/uninstall, and tests no system Node/pnpm needed to **launch**. Development builds are CI artifacts only, not GitHub Releases. Linux/macOS Desktop smoke verifies Electron launch and worker path; DMG/AppImage are future distribution, not required artifacts. Cross-platform GUI E2E may use virtual display; clearly label any OS smoke skipped due environment.
+**CI-DESKTOP-001 · P0:** Dedicated Desktop build/typecheck/component/IPC tests on matrix. The current Windows job only builds, hashes and uploads `ReleaseProof-Setup-<development-version>.exe`; the required next gate installs and launches it on a clean runner/VM, verifies a tiny project through actual main→worker→Core, checks report/copy/close/uninstall, and tests no system Node/pnpm needed to **launch**. Development builds are CI artifacts only, not GitHub Releases. Linux/macOS Desktop smoke verifies Electron launch and worker path; DMG/AppImage are future distribution, not required artifacts. Cross-platform GUI E2E may use virtual display; clearly label any OS smoke skipped due environment.
 
 ## GitHub Action
 
