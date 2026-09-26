@@ -52,6 +52,7 @@ describe('install failure classification', () => {
 
   it('recognizes a dependency that explicitly does not support the verifier OS', () => {
     expect(isUnsupportedVerificationPlatform('RuntimeError: uvloop does not support Windows at the moment')).toBe(true);
+    expect(isUnsupportedVerificationPlatform('\u001b[1;31mRuntimeError\u001b[0m: \u001b[35muvloop does not support Windows at the moment\u001b[0m')).toBe(true);
     expect(isUnsupportedVerificationPlatform('RuntimeError: invalid application configuration')).toBe(false);
   });
 });

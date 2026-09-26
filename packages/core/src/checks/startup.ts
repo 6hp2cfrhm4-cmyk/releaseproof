@@ -71,6 +71,23 @@ export async function runStartupCheck(
     throw cancelled;
   }
 
+  if (!isReady && service.isAlive()) {
+    // On Windows the spawned npm.cmd/cmd.exe wrapper can briefly outlive an
+    // immediately exiting project process. Observe a small bounded grace
+    // window before deciding that the startup command is still genuinely
+    // running and therefore unverifiable rather than crashed.
+    const graceUntil = Date.now() + 750;
+    while (service.isAlive() && Date.now() < graceUntil) {
+      if (signal?.aborted || service.aborted()) {
+        await service.kill();
+        const cancelled = new Error('Application startup verification was cancelled.');
+        cancelled.name = 'AbortError';
+        throw cancelled;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
   if (!isReady) {
     const logs = service.getLogs();
     const alive = service.isAlive();
@@ -127,16 +144,18 @@ export async function runStartupCheck(
     return {
       checkResult: {
         id: 'startup-check',
-        title: 'Production server failed to start or open port',
+        title: alive ? 'Startup did not become observable before the verification timeout' : 'Production server crashed during startup',
         category: 'runtime',
-        status: 'block',
-        severity: 'blocker',
+        status: alive ? 'unknown' : 'block',
+        severity: alive ? 'medium' : 'blocker',
         summary: alive
-          ? `Server started but port ${port} did not become ready within ${timeoutMs / 1000}s.`
+          ? `The startup process remained alive, but port ${port} did not become ready within ${timeoutMs / 1000}s. Available evidence does not establish whether startup is slow, waiting on external infrastructure, or misconfigured.`
           : `Server crashed immediately on startup. Process exited before port ${port} opened.`,
         evidence: [evidence],
-        remediation: 'Check startup logs for runtime errors, missing environment variables, or uncaught exceptions during boot.',
-        classification: 'APPLICATION_FAILURE',
+        remediation: alive
+          ? 'Inspect the bounded process logs and external service availability, then retry with an appropriate startup timeout.'
+          : 'Check startup logs for runtime errors, missing environment variables, or uncaught exceptions during boot.',
+        classification: alive ? 'VERIFICATION_UNAVAILABLE' : 'APPLICATION_FAILURE',
       },
     };
   }

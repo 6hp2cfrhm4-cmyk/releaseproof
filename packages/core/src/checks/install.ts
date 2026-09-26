@@ -28,7 +28,7 @@ export function isPackageManagerPolicyUnavailable(output: string): boolean {
 }
 
 export function isUnsupportedVerificationPlatform(output: string): boolean {
-  return /RuntimeError:\s*uvloop does not support Windows at the moment/i.test(output);
+  return /uvloop does not support Windows at the moment/i.test(output);
 }
 
 export async function runInstallCheck(
@@ -103,7 +103,11 @@ export async function runInstallCheck(
     };
   }
 
-  const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  // pip/setuptools frequently colorizes tracebacks even when the process is
+  // non-interactive. Strip ANSI control sequences before matching known
+  // environment limitations so colored output cannot turn them into false
+  // application blockers.
+  const combinedOutput = `${result.stdout}\n${result.stderr}`.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
   if (isIncompatiblePackageManager(combinedOutput)) {
     return {
       id: 'install-check',

@@ -15,6 +15,7 @@ const api: DesktopApi = {
   updateSettings: (settings: Partial<DesktopSettings>) => ipcRenderer.invoke('settings:update', settings),
   listRecent: () => ipcRenderer.invoke('recent:list'),
   removeRecent: (projectPath) => ipcRenderer.invoke('recent:remove', projectPath),
+  runDoctor: (projectPath) => ipcRenderer.invoke('doctor:run', projectPath),
   copyFix: (runId, findingId) => ipcRenderer.invoke('artifact:copy', runId, findingId),
   openArtifact: (runId, kind) => ipcRenderer.invoke('artifact:open', runId, kind),
 };

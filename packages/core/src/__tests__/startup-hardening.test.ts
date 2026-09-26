@@ -62,4 +62,13 @@ describe('startup ownership and stability hardening', () => {
     expect(result.checkResult.status).toBe('unknown');
     expect(result.checkResult.classification).toBe('VERIFICATION_UNAVAILABLE');
   }, 15000);
+
+  it('does not call a still-running, not-yet-listening startup an application failure without evidence', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'rp-slow-no-listener-'));
+    roots.push(root);
+    const result = await runStartupCheck(root, 'node -e "setInterval(()=>{}, 10000)"', 0, 800, '/', 100);
+    expect(result.checkResult.status).toBe('unknown');
+    expect(result.checkResult.classification).toBe('VERIFICATION_UNAVAILABLE');
+    expect(result.checkResult.evidence[0]).toMatchObject({ type: 'process', alive: true, listening: false });
+  }, 10000);
 });

@@ -61,7 +61,8 @@ http.createServer((req, res) => {
     }
 
     await fs.writeFile(path.join(root, 'server.cjs'), 'process.exit(17);');
-    expect((await runCli(['verify', root, '--port', String(await getFreePort()), '--timeout', '500', '--json', '--skip-sandbox'])).code).toBe(1);
+    const notReady = await runCli(['verify', root, '--port', String(await getFreePort()), '--timeout', '500', '--json', '--skip-sandbox']);
+    expect(notReady.code, JSON.stringify(notReady)).toBe(1);
     expect((await runCli(['verify', root, '--port', 'invalid', '--json', '--skip-sandbox'])).code).toBe(3);
   }, 15000);
 

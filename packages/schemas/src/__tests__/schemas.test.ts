@@ -119,4 +119,15 @@ describe('schemas', () => {
 
     expect(() => VerificationReportSchema.parse({ ...report, verdict: 'READY' })).toThrow();
   });
+
+  it('does not allow READY to hide skipped or incomplete evidence', () => {
+    expect(() => VerificationReportSchema.parse({
+      id: 'incomplete-ready', version: '1.0.0', timestamp: new Date().toISOString(),
+      projectName: 'app', projectPath: '.', profile: { root: '.', name: 'app' },
+      verdict: 'READY', score: 100, evidenceCoverage: 0.5,
+      categoryScores: {}, counts: { total: 1, passed: 0, warnings: 0, blockers: 0, unknown: 1, skipped: 0, notApplicable: 0 },
+      checks: [{ id: 'browser', title: 'Browser', category: 'browser', status: 'unknown', severity: 'high', summary: 'Unavailable', evidence: [] }],
+      durationMs: 1, artifactsDir: '.releaseproof',
+    })).toThrow(/unknown\/skipped|complete evidence/);
+  });
 });

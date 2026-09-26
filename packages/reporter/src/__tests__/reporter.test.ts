@@ -14,6 +14,7 @@ const mockReport: VerificationReport = {
   timestamp: new Date().toISOString(),
   projectName: 'test-app',
   projectPath: '/tmp/test-app',
+  target: { path: '.', kind: 'root' },
   profile: {
     root: '/tmp/test-app',
     name: 'test-app',
@@ -26,6 +27,7 @@ const mockReport: VerificationReport = {
     environmentVariables: [],
     capabilities: { browser: true, api: false, docker: false },
     entrypoints: ['/'],
+    targetCandidates: [],
   },
   verdict: 'NOT_READY',
   score: 75,
@@ -71,6 +73,8 @@ const mockReport: VerificationReport = {
   ],
   durationMs: 3400,
   artifactsDir: '/tmp/test-app/.releaseproof',
+  timings: { totalMs: 3400 },
+  limitations: [],
 };
 
 describe('reporters', () => {

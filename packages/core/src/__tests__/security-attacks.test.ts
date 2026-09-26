@@ -32,6 +32,7 @@ describe('security attack & hardening test suite', () => {
       timestamp: new Date().toISOString(),
       projectName: maliciousPayload,
       projectPath: '/test/' + maliciousPayload,
+      target: { path: '.', kind: 'root' },
       profile: {
         name: maliciousPayload,
         root: '/test',
@@ -42,6 +43,7 @@ describe('security attack & hardening test suite', () => {
         frameworks: [{ type: 'generic-node', name: maliciousPayload, confidence: 1 }],
         packageManagers: [{ type: 'npm', lockfile: 'package-lock.json' }],
         entrypoints: ['/'],
+        targetCandidates: [],
         ports: [3000],
         commands: { install: 'npm install', build: maliciousPayload, start: 'npm start' },
       },
@@ -81,6 +83,8 @@ describe('security attack & hardening test suite', () => {
       ],
       durationMs: 1234,
       artifactsDir: '/test/.releaseproof',
+      timings: { totalMs: 1234 },
+      limitations: [],
     };
 
     const html = generateHtmlReport(mockReport);

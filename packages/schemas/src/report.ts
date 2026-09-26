@@ -47,6 +47,14 @@ export const ReportCleanupSchema = z.object({
   errors: z.array(z.string()).default([]),
 }).default({ status: 'clean', errors: [] });
 
+export const ReportEnvironmentSchema = z.object({
+  platform: z.string(),
+  arch: z.string(),
+  nodeVersion: z.string(),
+  pythonInterpreter: z.string().optional(),
+  hostEnvironmentPolicy: z.enum(['minimal', 'explicit']).default('minimal'),
+}).default({ platform: 'unknown', arch: 'unknown', nodeVersion: 'unknown', hostEnvironmentPolicy: 'minimal' });
+
 export const VerificationReportSchema = z.object({
   // Optional on input for backwards-compatible readers; Core always emits it.
   schemaVersion: z.string().optional(),
@@ -56,6 +64,7 @@ export const VerificationReportSchema = z.object({
   timestamp: z.string(),
   projectName: z.string(),
   projectPath: z.string(),
+  target: z.object({ path: z.string(), kind: z.enum(['root', 'nested']).default('root') }).default({ path: '.', kind: 'root' }),
   profile: ProjectProfileSchema,
   verdict: VerificationVerdictSchema,
   score: z.number().min(0).max(100),
@@ -78,6 +87,9 @@ export const VerificationReportSchema = z.object({
    * is not an application failure and must remain visible to every consumer. */
   capabilities: ReportCapabilitiesSchema.optional(),
   cleanup: ReportCleanupSchema.optional(),
+  environment: ReportEnvironmentSchema.optional(),
+  timings: z.record(z.number()).default({}),
+  limitations: z.array(z.string()).default([]),
   checks: z.array(CheckResultSchema),
   durationMs: z.number(),
   artifactsDir: z.string(),
@@ -96,6 +108,15 @@ export const VerificationReportSchema = z.object({
   }
   if (report.verdict === 'READY' && report.checks.some((check) => check.status === 'block')) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['verdict'], message: 'A report with a blocker cannot be READY.' });
+  }
+  if (report.verdict === 'READY' && report.checks.some((check) => check.status === 'unknown' || check.status === 'skipped')) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['verdict'], message: 'READY requires every applicable check to be observed; unknown/skipped checks are incomplete evidence.' });
+  }
+  if (report.verdict === 'READY' && report.evidenceCoverage < 1) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['evidenceCoverage'], message: 'READY requires complete evidence coverage.' });
+  }
+  if (report.verdict === 'INCOMPLETE' && report.score === 100) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['score'], message: 'INCOMPLETE cannot claim a perfect readiness score.' });
   }
 });
 export type VerificationReport = z.infer<typeof VerificationReportSchema>;

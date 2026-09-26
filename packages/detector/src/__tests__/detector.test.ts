@@ -112,4 +112,22 @@ describe('detector', () => {
     expect(profile.entrypoints).toContain('/items');
     expect(profile.capabilities.api).toBe(true);
   });
+
+  it('surfaces shallow monorepo targets without claiming the root is runnable', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'rp-detector-mono-'));
+    try {
+      await fs.mkdir(path.join(root, 'apps', 'web'), { recursive: true });
+      await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'workspace-root', workspaces: ['apps/*'] }));
+      await fs.writeFile(path.join(root, 'apps', 'web', 'package.json'), JSON.stringify({
+        name: 'web', dependencies: { express: '4.21.0' }, scripts: { start: 'node server.js' },
+      }));
+      await fs.writeFile(path.join(root, 'apps', 'web', 'server.js'), "require('http').createServer((_q,r)=>r.end('ok')).listen(4100);");
+      const profile = await detectProject(root);
+      expect(profile.targetCandidates.map((candidate) => candidate.path)).toEqual(['.', 'apps/web']);
+      expect(profile.targetCandidates.find((candidate) => candidate.path === 'apps/web')?.runnable).toBe(true);
+      expect(profile.targetCandidates.find((candidate) => candidate.path === '.')?.runnable).toBe(false);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
 });

@@ -12,6 +12,15 @@ export interface DesktopSettings {
   cleanWorkspace: boolean;
 }
 
+export interface DoctorCapability {
+  id: string;
+  label: string;
+  required: boolean;
+  available: boolean;
+  version?: string;
+  remediation?: string;
+}
+
 export type RunEvent =
   | { type: 'started'; runId: string }
   | { type: 'progress'; runId: string; step: string; status: 'running' | 'done' | 'fail'; message?: string }
@@ -33,6 +42,7 @@ export interface DesktopApi {
   updateSettings(settings: Partial<DesktopSettings>): Promise<DesktopSettings>;
   listRecent(): Promise<string[]>;
   removeRecent(projectPath: string): Promise<void>;
+  runDoctor(projectPath: string): Promise<{ capabilities: DoctorCapability[]; ready: boolean }>;
   copyFix(runId: string, findingId?: string): Promise<void>;
   openArtifact(runId: string, kind: 'html' | 'fix' | 'directory'): Promise<void>;
 }

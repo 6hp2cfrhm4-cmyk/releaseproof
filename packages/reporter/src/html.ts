@@ -10,7 +10,7 @@ function serializeSafeJson(obj: unknown): string {
 }
 
 export function generateHtmlReport(report: VerificationReport): string {
-  const isReady = report.verdict === 'READY';
+  const verdictColor = report.verdict === 'READY' ? 'var(--green)' : report.verdict === 'INCOMPLETE' || report.verdict === 'CANCELLED' ? 'var(--yellow)' : 'var(--red)';
   const aiMarkdown = generateAiHandoffMarkdown(report);
   const jsonReportSafe = serializeSafeJson(report);
   const aiMarkdownSafe = serializeSafeJson(aiMarkdown);
@@ -112,7 +112,7 @@ export function generateHtmlReport(report: VerificationReport): string {
     .verdict-title {
       font-size: 1.75rem;
       font-weight: 800;
-      color: ${isReady ? 'var(--green)' : 'var(--red)'};
+      color: ${verdictColor};
     }
     .verdict-subtitle {
       color: var(--text);

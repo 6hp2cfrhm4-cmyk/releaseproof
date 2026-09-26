@@ -2,7 +2,8 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { fork, ChildProcess } from 'node:child_process';
+import { fork, ChildProcess, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { detectProject } from '@releaseproof/detector';
 import { VerificationReportSchema } from '@releaseproof/schemas';
 import { generateAiHandoffMarkdown, generateFindingHandoffMarkdown } from '@releaseproof/reporter';
@@ -10,7 +11,8 @@ import type { DesktopSettings, DetectionPreview, RunEvent } from '../shared/ipc.
 import { assertAbsoluteProjectPath, validateArtifactKind, validateRunInput, validateSettingsPatch } from './validation.js';
 
 const defaultSettings: DesktopSettings = { theme: 'system', defaultTimeoutMs: 30000, cleanWorkspace: true };
-const runs = new Map<string, { projectPath: string; report?: ReturnType<typeof VerificationReportSchema.parse>; worker?: ChildProcess; cancelling?: boolean }>();
+const execFileAsync = promisify(execFile);
+const runs = new Map<string, { projectPath: string; report?: ReturnType<typeof VerificationReportSchema.parse>; worker?: ChildProcess; cancelling?: boolean; terminal?: boolean }>();
 let mainWindow: BrowserWindow | undefined;
 let settingsCache: DesktopSettings = defaultSettings;
 
@@ -84,27 +86,45 @@ function registerIpc(): void {
         try {
           const parsed = VerificationReportSchema.parse(event.report);
           const run = runs.get(runId);
-          if (run) run.report = parsed;
+          if (run) { run.report = parsed; run.terminal = true; }
           send({ ...event, report: parsed });
+          if (run?.worker?.connected) run.worker.disconnect();
+          if (run) run.worker = undefined;
         } catch (error) {
           send({ type: 'error', runId, message: `Verification report was invalid: ${error instanceof Error ? error.message : String(error)}` });
         }
       } else send(event);
     });
-    worker.on('error', (error) => send({ type: 'error', runId, message: `Verification worker failed: ${error.message}` }));
+    worker.on('error', (error) => {
+      const run = runs.get(runId);
+      if (run && !run.terminal) {
+        run.terminal = true;
+        send({ type: 'error', runId, message: `Verification worker failed: ${error.message}` });
+      }
+    });
     worker.on('exit', (code) => {
-      if (code !== 0 && runs.has(runId) && !runs.get(runId)?.report) send({ type: 'error', runId, message: `Verification worker exited with code ${code ?? 'unknown'}.` });
+      const run = runs.get(runId);
+      if (run && !run.terminal) {
+        run.terminal = true;
+        send({ type: 'error', runId, message: run.cancelling ? 'Verification worker stopped before cancellation completed.' : `Verification worker exited with code ${code ?? 'unknown'}.` });
+      }
+      if (run) run.worker = undefined;
     });
     worker.send({ runId, projectPath, target: input.target, timeoutMs: input.timeoutMs ?? settingsCache.defaultTimeoutMs, cleanWorkspace: settingsCache.cleanWorkspace });
     return runId;
   });
   ipcMain.handle('run:cancel', async (_event, runId: unknown) => {
     const run = assertRun(runId);
+    const verifiedRunId = runId as string;
     if (run.cancelling) return;
     run.cancelling = true;
     run.worker?.send({ type: 'cancel' });
     setTimeout(() => {
-      if (run.worker && !run.worker.killed) run.worker.kill();
+      if (run.worker && !run.worker.killed && !run.terminal) {
+        run.worker.kill();
+        run.terminal = true;
+        send({ type: 'error', runId: verifiedRunId, message: 'Verification cancellation timed out; the worker was terminated.' });
+      }
     }, 5000).unref();
   });
   ipcMain.handle('settings:get', async () => settingsCache);
@@ -124,6 +144,19 @@ function registerIpc(): void {
     const recent = (await readJson<string[]>(recentPath(), [])).filter((item) => item !== value);
     await writeJson(recentPath(), recent.slice(0, 8));
   });
+  ipcMain.handle('doctor:run', async (_event, projectPath: unknown) => {
+    const canonical = assertAbsoluteProjectPath(projectPath);
+    const profile = await detectProject(canonical);
+    const needsNode = profile.languages.some((language) => language === 'javascript' || language === 'typescript');
+    const needsPython = profile.languages.includes('python');
+    const capabilities = await Promise.all([
+      probeTool('node', process.platform === 'win32' ? 'node.exe' : 'node', ['--version'], needsNode, 'Install Node.js 20 or newer for project verification.'),
+      ...(needsPython ? [probeTool('python', process.platform === 'win32' ? 'python.exe' : 'python3', ['--version'], true, 'Install Python 3.11+ or configure an explicit interpreter.')] : []),
+      ...(profile.packageManagers.some((manager) => manager.type === 'pnpm') ? [probeTool('pnpm', 'pnpm', ['--version'], true, 'Install pnpm or enable Corepack.')] : []),
+      ...(profile.packageManagers.some((manager) => manager.type === 'yarn') ? [probeTool('yarn', 'yarn', ['--version'], true, 'Install Yarn or enable Corepack.')] : []),
+    ]);
+    return { capabilities, ready: capabilities.every((capability) => !capability.required || capability.available) };
+  });
   ipcMain.handle('artifact:open', async (_event, runId: unknown, kind: unknown) => {
     const run = assertRun(runId);
     if (!run.report) throw new Error('The verification report is not ready.');
@@ -142,6 +175,15 @@ function registerIpc(): void {
       : generateAiHandoffMarkdown(report);
     clipboard.writeText(text);
   });
+}
+
+async function probeTool(id: string, command: string, args: string[], required: boolean, remediation: string) {
+  try {
+    const result = await execFileAsync(command, args, { timeout: 5000, windowsHide: true });
+    return { id, label: id === 'node' ? 'Node.js' : id[0].toUpperCase() + id.slice(1), required, available: true, version: `${result.stdout}${result.stderr}`.trim(), remediation };
+  } catch (error) {
+    return { id, label: id === 'node' ? 'Node.js' : id[0].toUpperCase() + id.slice(1), required, available: false, remediation, version: error instanceof Error ? error.message : undefined };
+  }
 }
 
 app.whenReady().then(async () => {

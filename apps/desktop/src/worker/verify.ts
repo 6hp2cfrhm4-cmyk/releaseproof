@@ -30,6 +30,12 @@ process.on('message', async (message: StartMessage | { type: 'cancel' }) => {
     emit({ type: 'error', message: error instanceof Error ? error.message : String(error) });
   } finally {
     active = undefined;
+    // A forked worker must terminate after one verification. Keeping the IPC
+    // listener alive would leave an orphan utility process after success,
+    // failure, or cancellation.
+    setTimeout(() => {
+      if (process.connected) process.disconnect();
+    }, 0).unref();
   }
 });
 

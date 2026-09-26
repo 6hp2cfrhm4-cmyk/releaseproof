@@ -189,6 +189,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
   let startCommand = config.start?.command || profile.commands.start;
   let executionEnvironment: Record<string, string | undefined> = { ...providedEnvironment };
   let pythonRuntimeDir: string | undefined;
+  let pythonInterpreter: string | undefined;
 
   try {
     throwIfAborted(signal);
@@ -221,6 +222,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
       buildCommand = prepared.buildCommand;
       startCommand = prepared.startCommand;
       executionEnvironment = prepared.environment;
+      pythonInterpreter = prepared.interpreter;
       allChecks.push({
         id: 'python-interpreter-setup',
         title: 'Isolated Python interpreter configured',
@@ -438,6 +440,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     timestamp: new Date().toISOString(),
     projectName: profile.name,
     projectPath: relProjectPath,
+    target: { path: config.target ?? '.', kind: config.target ? 'nested' : 'root' },
     profile: {
       ...profile,
       root: relProjectPath,
@@ -454,6 +457,18 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
       status: runStatus === 'cancelled' ? 'cancelled' : cleanupErrors.length > 0 ? 'failed' : 'clean',
       errors: cleanupErrors,
     },
+    environment: {
+      platform: process.platform,
+      arch: process.arch,
+      nodeVersion: process.version,
+      ...(pythonInterpreter ? { pythonInterpreter } : {}),
+      hostEnvironmentPolicy: allowHostEnv.length > 0 ? 'explicit' : 'minimal',
+    },
+    timings: { totalMs: durationMs },
+    limitations: [
+      ...(browserVerification.status === 'UNAVAILABLE' ? ['Browser capability was unavailable; client-side behavior is not proven.'] : []),
+      ...(profile.targetCandidates.length > 1 ? ['Multiple project targets were detected; verification covers only the selected target.'] : []),
+    ],
     durationMs,
     artifactsDir: relArtifactsDir,
     jsonReportPath: relJsonPath,
