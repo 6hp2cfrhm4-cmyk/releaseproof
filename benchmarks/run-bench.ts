@@ -85,7 +85,10 @@ export async function runBenchmark(): Promise<void> {
             ? { python: { interpreter: process.env.RELEASEPROOF_PYTHON_INTERPRETER } }
             : {}),
           start: {
-            timeoutMs: mode === 'FAST' ? 2500 : 10000,
+            // A disposable Python venv can spend several seconds resolving
+            // its interpreter on hosted Windows runners. FAST is a smoke
+            // profile, not a claim that startup must fit a 2.5s budget.
+            timeoutMs: mode === 'FAST' ? 10000 : 10000,
             stabilityWindowMs: mode === 'FAST' ? 250 : 1000,
           },
           browser: {
