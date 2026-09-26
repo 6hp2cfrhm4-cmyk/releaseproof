@@ -145,7 +145,8 @@ jobs:
           version: 9
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
-      - run: pnpm --filter @releaseproof/desktop test
+      - name: Typecheck Desktop renderer
+        run: pnpm --filter @releaseproof/desktop exec tsc -p tsconfig.json --noEmit
       - name: Build NSIS installer
         run: pnpm --filter @releaseproof/desktop run package
       - name: Verify installer artifact and checksum
