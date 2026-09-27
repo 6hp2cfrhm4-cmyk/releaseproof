@@ -10,6 +10,7 @@ import { VerificationReportSchema } from '@releaseproof/schemas';
 import { generateAiHandoffMarkdown, generateFindingHandoffMarkdown } from '@releaseproof/reporter';
 import type { DesktopSettings, DetectionPreview, RunEvent } from '../shared/ipc.js';
 import { assertAbsoluteProjectPath, validateArtifactKind, validateRunInput, validateSettingsPatch } from './validation.js';
+import { handleWorkerExit } from './worker-exit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultSettings: DesktopSettings = { theme: 'system', defaultTimeoutMs: 30000, cleanWorkspace: true };
@@ -107,10 +108,7 @@ function registerIpc(): void {
     });
     worker.on('exit', (code) => {
       const run = runs.get(runId);
-      if (run && !run.terminal) {
-        run.terminal = true;
-        send({ type: 'error', runId, message: run.cancelling ? 'Verification worker stopped before cancellation completed.' : `Verification worker exited with code ${code ?? 'unknown'}.` });
-      }
+      if (run) handleWorkerExit(runId, code, run, send);
       if (run) run.worker = undefined;
     });
     worker.send({ runId, projectPath, target: input.target, timeoutMs: input.timeoutMs ?? settingsCache.defaultTimeoutMs, cleanWorkspace: settingsCache.cleanWorkspace });
