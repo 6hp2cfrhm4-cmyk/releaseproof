@@ -16,7 +16,7 @@ The earlier local Windows rerun on `29b700f` (TP11/TN28/FP1/FN2) remains a histo
 
 ## Current final-SHA corpus reruns — COMPLETE for the recorded ten targets
 
-`docs/REAL_WORLD_VALIDATION.md` contains the full 2026-09-27 table, exact SHAs, toolchains, selected targets and evidence limits. On `6455c50`, all ten repositories were rerun on Windows 11 build 26200 / Node 24.19.0 / Python 3.12.14 (where applicable), with compatible pinned pnpm versions for taxonomy, leerob/site, vitesse-lite and vite-plugin-inspect. Totals are 3 READY, 1 NOT_READY and 6 INCOMPLETE; no confirmed false blocker remains unexplained. The six refreshed pins are not conflated with their unavailable historical SHAs. `hackathon-starter` remains INCOMPLETE because its process stayed alive without port 8080 readiness in 60 seconds and available evidence did not determine why.
+`docs/REAL_WORLD_VALIDATION.md` contains the full 2026-09-27 table, exact SHAs, toolchains, selected targets and evidence limits. On final implementation source `2357e45`, all ten repositories (11 targets including both FastAPI microservices root and `users/`) were rerun on Windows 11 build 26200 / Node 24.19.0 / Python 3.12.14, with compatible pinned pnpm versions. Totals are 3 READY, 1 NOT_READY and 6 repositories INCOMPLETE; no confirmed false blocker was observed. The six refreshed pins are not conflated with their unavailable historical SHAs. `hackathon-starter` remains INCOMPLETE because its process stayed alive without port 8080 readiness in 60 seconds and available evidence did not determine why. The previous `6455c50` outcomes remain explicitly historical in the corpus document.
 
 ## Prior working-tree corpus record (historical observation)
 

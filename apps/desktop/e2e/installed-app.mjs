@@ -112,6 +112,29 @@ try {
     return !['node.exe', 'node.cmd', 'pnpm.cmd', 'corepack.cmd'].some((tool) => existsSync(path.join(entry, tool)));
   }).join(path.delimiter);
   session = await launchAndAttach(userData, { ...process.env, PATH: pathWithoutNode, NODE_OPTIONS: '' });
+  await session.page.keyboard.press('Tab');
+  const firstFocus = await session.page.evaluate(() => ({
+    tag: document.activeElement?.tagName,
+    outlineStyle: getComputedStyle(document.activeElement).outlineStyle,
+    outlineWidth: getComputedStyle(document.activeElement).outlineWidth,
+  }));
+  assert.equal(firstFocus.tag, 'BUTTON', 'Keyboard navigation did not reach an actionable control.');
+  assert.equal(firstFocus.outlineStyle, 'solid', 'Keyboard focus must have a visible outline.');
+  assert.notEqual(firstFocus.outlineWidth, '0px', 'Keyboard focus outline must be non-zero.');
+
+  const doctorProject = await session.page.evaluate(async (selectedProject) => {
+    await window.releaseproof.previewProject(selectedProject);
+    return selectedProject;
+  }, projectPath);
+  await closeAttachedApp(session);
+  session = await launchAndAttach(userData, { ...process.env, PATH: pathWithoutNode, NODE_OPTIONS: '' });
+  await session.page.getByRole('button', { name: doctorProject, exact: true }).click();
+  await session.page.getByRole('button', { name: 'Doctor', exact: true }).click();
+  await session.page.getByRole('button', { name: 'Run capability checks' }).click();
+  const doctorNode = session.page.locator('.doctor-list .finding').filter({ hasText: 'Node.js' });
+  await doctorNode.waitFor({ timeout: 10000 });
+  assert.match(await doctorNode.innerText(), /MISSING[\s\S]*Install Node\.js 20 or newer/,
+    'System Doctor did not explain how to restore a required missing runtime.');
   await closeAttachedApp(session);
   session = undefined;
   console.log('Packaged Desktop launch passed without Node, pnpm, or Corepack on PATH.');
@@ -119,8 +142,9 @@ try {
   // Verify an actual target through installed renderer -> preload -> validated
   // main IPC -> worker -> the shared Core, using the project toolchain normally.
   session = await launchAndAttach(userData, process.env);
-  const { page, child } = session;
+  let { page, child } = session;
   console.log('Packaged Desktop opened; running the selected fixture through its worker.');
+  await page.getByRole('button', { name: projectPath, exact: true }).click();
   const result = await page.evaluate(async (selectedProject) => {
     const preview = await window.releaseproof.previewProject(selectedProject);
     const target = preview.profile.targetCandidates.find((candidate) => candidate.runnable);
@@ -170,17 +194,43 @@ try {
   assert.match(await page.locator('.log-box').innerText(), /finished|done|READY/i, 'Logs view did not retain the terminal run event.');
   await page.getByRole('button', { name: 'Doctor', exact: true }).click();
   await page.getByRole('heading', { name: 'System Doctor' }).waitFor({ timeout: 5000 });
-  await page.getByText('Choose a project first to inspect its detected runtime requirements.').waitFor({ timeout: 5000 });
+  await page.getByRole('button', { name: 'Run capability checks' }).click();
+  const availableDoctorNode = page.locator('.doctor-list .finding').filter({ hasText: 'Node.js' });
+  await availableDoctorNode.waitFor({ timeout: 10000 });
+  assert.match(await availableDoctorNode.innerText(), /AVAILABLE[\s\S]*v\d+/,
+    'System Doctor did not report the installed required runtime and version.');
   await page.getByRole('button', { name: 'Settings' }).click();
   await page.getByText('0.2.0-dev.0').waitFor({ timeout: 10000 });
   const themeSelect = page.locator('.setting-row select').first();
   await themeSelect.selectOption('light');
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+  await page.getByRole('button', { name: 'Doctor', exact: true }).click();
+  const lightContrast = await page.evaluate(() => {
+    const rgb = (value) => value.match(/[\d.]+/g).slice(0, 3).map(Number).map((part) => part / 255).map((part) => part <= 0.04045 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4);
+    const luminance = (value) => { const [r, g, b] = rgb(value); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const background = getComputedStyle(document.documentElement).backgroundColor;
+    return [...document.querySelectorAll('.screen .eyebrow, .screen .lede, .screen .metric span')].map((element) => {
+      const foreground = getComputedStyle(element).color;
+      const [light, dark] = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+      return { text: element.textContent?.trim(), ratio: (light + 0.05) / (dark + 0.05) };
+    });
+  });
+  assert.ok(lightContrast.length > 0 && lightContrast.every((item) => item.ratio >= 4.5),
+    `Light theme text contrast below WCAG AA: ${JSON.stringify(lightContrast)}`);
+  await page.getByRole('button', { name: 'Settings' }).click();
   await themeSelect.selectOption('dark');
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
-  await themeSelect.selectOption('system');
+  await closeAttachedApp(session);
+  session = undefined;
+  session = await launchAndAttach(userData, process.env);
+  page = session.page;
+  child = session.child;
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+  assert.equal(await page.locator('.setting-row select').first().inputValue(), 'dark', 'Theme selection was not persisted across application restart.');
+  const persistedThemeSelect = page.locator('.setting-row select').first();
+  await persistedThemeSelect.selectOption('system');
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'system');
-  await page.getByRole('button', { name: 'Overview' }).click();
   for (const artifact of ['report.json', 'report.html', 'RELEASEPROOF_FIX.md']) {
     await fs.access(path.join(projectPath, '.releaseproof', artifact));
   }

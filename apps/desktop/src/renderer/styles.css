@@ -39,5 +39,6 @@ nav { display: grid; gap: 4px; }
 .target-picker select { width: 100%; background: #1a1e26; border: 1px solid #343c4a; color: inherit; border-radius: 6px; padding: 9px; }
 :root[data-theme="light"] .sidebar, :root[data-theme="light"] .detection-panel, :root[data-theme="light"] .recent, :root[data-theme="light"] .verdict { background: #fff; border-color: #d7dce4; }
 :root[data-theme="light"] .sidebar { background: #f0f2f5; }
+:root[data-theme="light"] .eyebrow, :root[data-theme="light"] .lede, :root[data-theme="light"] .muted, :root[data-theme="light"] .metric span, :root[data-theme="light"] .verdict p, :root[data-theme="light"] .finding p, :root[data-theme="light"] .finding small, :root[data-theme="light"] .finding-detail p, :root[data-theme="light"] .setting-row, :root[data-theme="light"] .log-box { color: #566172; }
 @media (max-width: 900px) { .sidebar { width: 165px; } .screen { padding-left: 32px; padding-right: 32px; } .summary-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }

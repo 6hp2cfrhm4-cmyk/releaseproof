@@ -1,13 +1,13 @@
 # Real-World Open Source Repository Validation
 
 > **Revalidation date:** 2026-09-27
-> **ReleaseProof under test:** unreleased `0.2.0-dev.0`, source `6455c5028de4d82f15a8220ae7ed2b1826ce046e`
+> **ReleaseProof under test:** unreleased `0.2.0-dev.0`, source `2357e457d7a2f1a1337c42b18277e525511206a6`
 > **Environment:** Windows 11 Home 10.0.26200 x64, Node v24.19.0, Python 3.12.14. Compatible managers were used where required by the lockfile: pnpm 8.15.9 (taxonomy), pnpm 9.15.9 (leerob/site), pnpm 10.7.1 (vite-plugin-inspect), pnpm 12.3.4 (vitesse-lite); npm for npm-lockfile projects.
 > **Method:** clean-workspace verification of ten public repositories at exact pinned SHAs; no upstream changes. Reports were inspected for target, capability, checks and evidence. These outcomes are environment-scoped, not universal claims.
 
 The six unreachable historical pins were not silently substituted. The owner's decision authorized fresh pins for those same six repositories; the original hashes and their older outcomes remain in the historical sections below. The four still-available original pins were rerun unchanged.
 
-## Final-SHA rerun — 2026-09-27
+## Final-SHA rerun — 2026-09-27, ReleaseProof `2357e45`
 
 | Repository | Pin | Exact SHA | Target / toolchain | Result | Evidence and limitation |
 | --- | --- | --- | --- | --- | --- |
@@ -22,7 +22,26 @@ The six unreachable historical pins were not silently substituted. The owner's d
 | [fastapi-microservices](https://github.com/Kludex/fastapi-microservices) | refreshed | `262bd1b7a97d6a6375067abac778bb8d75bb5edc` | root and `users/`; Python 3.12.14 | **INCOMPLETE 56 root; INCOMPLETE 80 users/** | Root has no runnable target, so no runtime proof. `users/` install identifies pinned `uvloop==0.15.2` as unsupported on Windows. Both are 0 blockers/1 unknown; browser skipped/not applicable. |
 | [todomvc](https://github.com/tastejs/todomvc) | refreshed | `ff43b02e59dfa604386bb382034b2cd07c2bcd8a` | repository root; Express dependencies, npm lockfile | **INCOMPLETE 83** | Root has no supported build/start target; README commands scoped to nested `examples/react` do not prove root runtime. 0 blockers, 1 unknown; browser skipped. |
 
-Totals across the ten repositories: **3 READY, 1 NOT_READY, 6 INCOMPLETE** (the FastAPI microservices root and `users/` are two targets within one repository). No confirmed false blocker was observed. `hackathon-starter` remains unresolved and correctly incomplete; the `vite-plugin-inspect` build failure is supported by Windows build evidence. Reports remain local under temporary checkouts and were not committed because they contain machine-specific paths/logs; the table records bounded, redacted conclusions.
+Totals across the ten repositories: **3 READY, 1 NOT_READY, 6 INCOMPLETE** (the FastAPI microservices root and `users/` are two targets within one repository; there are 11 target runs). No confirmed false blocker was observed. `hackathon-starter` remains unresolved and correctly incomplete; the `vite-plugin-inspect` build failure is supported by Windows build evidence. Reports remain local under temporary checkouts and were not committed because they contain machine-specific paths/logs; the table records bounded, redacted conclusions. pnpm was pinned to 8.15.9 (taxonomy), 9.15.9 (leerob/site), 10.7.1 (vite-plugin-inspect) and 12.3.4 (vitesse-lite); the final Vitesse rerun verified that manager and reported READY. Python targets used Python 3.12.14. This corpus is diagnostic Windows evidence, not a universal outcome guarantee.
+
+## Previous ReleaseProof source `6455c50` — historical snapshot from 2026-09-27
+
+This is the prior table retained verbatim in outcome meaning before the `2357e45` rerun. It used the same repository pins and environment. Do not combine its values with the current table or treat score changes as upstream changes.
+
+| Repository | Exact SHA | Result on `6455c50` | Evidence boundary |
+| --- | --- | --- | --- |
+| Next.js-Boilerplate | `9df22d0980702729da01c4465b9fb8ca292d6cce` | INCOMPLETE 71 | PostgreSQL unavailable for build; 0 blockers, 1 unknown, 1 warning. |
+| taxonomy | `298a8857c7128a0d121e7f699dfd729f23b3966d` | INCOMPLETE 79 | Required project env absent; 0 blockers, 1 unknown. |
+| leerob/site | `fd03371e3c90481a8447904e1b548e4c0327b7db` | READY 94 | Browser verified; two nonblocking analytics warnings. |
+| vitesse-lite | `0b352977755e1f7f6399698e308777760409ca71` | READY 100 | Browser verified. |
+| vite-plugin-inspect | `87be12718b1abc56c42e7024b08f41546b08951e` | NOT_READY 75 | Upstream Windows `ERR_UNSUPPORTED_ESM_URL_SCHEME` build failure. |
+| node-express-realworld-example-app | `30b68e1e881462b2f4164ea09ab4c4f5699c7b0b` | READY 100 | API route passed; browser skipped for API-only target. |
+| hackathon-starter | `410fccec23f6d4b509397b408ba7745f0f469027` | INCOMPLETE 75 | Port 8080 not ready within 60s; cause unresolved. |
+| fastapi-realworld-example-app | `029eb7781c60d5f563ee8990a0cbfb79b244538c` | INCOMPLETE 72 | Old asyncpg required unavailable MSVC. |
+| fastapi-microservices root / `users/` | `262bd1b7a97d6a6375067abac778bb8d75bb5edc` | INCOMPLETE 56 / 80 | No runnable root; `users/` pins Windows-incompatible uvloop. |
+| todomvc | `ff43b02e59dfa604386bb382034b2cd07c2bcd8a` | INCOMPLETE 83 | Root has no runnable target; README `cd` instructions belong to nested examples. |
+
+Totals were 3 READY, 1 NOT_READY and 6 repositories INCOMPLETE (7 target runs). The refreshed SHAs and six unavailable historical SHAs remain separately recorded below.
 
 ## Prior run — 2026-09-23 (historical; different ReleaseProof SHA)
 
