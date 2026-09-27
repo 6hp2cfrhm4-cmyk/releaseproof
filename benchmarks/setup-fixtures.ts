@@ -11,6 +11,7 @@ export interface FixtureDefinition {
   expected: {
     expectedVerdict: 'READY' | 'NOT_READY' | 'INCOMPLETE';
     expectedBlockerCategory?: string;
+    expectedBlockerCheckId?: string;
     expectedWarningCategory?: string;
     minBlockers?: number;
     minWarnings?: number;
@@ -677,7 +678,9 @@ export async function setupFixtures(): Promise<void> {
     }
 
     const expectedPath = path.join(fixDir, 'expected.json');
-    await fs.writeFile(expectedPath, JSON.stringify(fixture.expected, null, 2), 'utf-8');
+    const existingExpected = await fs.readFile(expectedPath, 'utf-8').catch(() => '');
+    const expectedNewline = existingExpected.endsWith('\r\n') ? '\r\n' : existingExpected.endsWith('\n') ? '\n' : '';
+    await fs.writeFile(expectedPath, `${JSON.stringify(fixture.expected, null, 2)}${expectedNewline}`, 'utf-8');
   }
 
   console.log(`✓ Successfully configured ${allFixtures.length} test fixtures in fixtures/`);

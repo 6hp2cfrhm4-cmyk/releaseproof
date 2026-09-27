@@ -2,6 +2,17 @@
 
 This ledger tracks Stage B against [17_ACCEPTANCE_CRITERIA.md](17_ACCEPTANCE_CRITERIA.md) and [20_FINAL_CHECKLIST.md](20_FINAL_CHECKLIST.md). `DONE` requires evidence; code presence or an older green run is insufficient.
 
+## Latest checkpoint — 2026-09-27
+
+- **Current source:** branch `codex/core-hardening-before-desktop`, committed HEAD `5a8cee6025f1d0db5f81b0e9be922d68c2e5bdb0`; origin branch and open draft PR #1 point at that SHA. Historical tag `v0.1.0` remains at `d03eae2e2b828d551d897669f0e4f4925b64ab14`.
+- **Exact-HEAD CI:** [run 36297402432](https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/runs/36297402432) passed all nine jobs: six OS/Node matrix jobs, Action E2E, CLI tarball E2E, and Windows Desktop installer smoke. This is the latest committed-source gate; see [02_CURRENT_STATE.md](02_CURRENT_STATE.md) for boundaries.
+- **Current working-tree validation:** full tests passed 25 files (90 passed, 1 skipped); monorepo build, lint/typecheck, benchmark typecheck, and E2E syntax check passed. The AUTHORITATIVE 42-fixture run passed with TP 12 / TN 30 / FP 0 / FN 0, 0 expectation mismatches, 0 execution errors, 7 external cases, 794.0 seconds. Benchmark output recorded source commit `5a8cee6025f1d0db5f81b0e9be922d68c2e5bdb0` and `Working tree: DIRTY`.
+- **Packaged Desktop local E2E:** rebuilt `ReleaseProof-Setup-0.2.0-dev.0.exe`, installed into a unique temporary directory, launched without Node/pnpm/Corepack on PATH, exercised the real renderer/worker and report artifacts, asserted READY/NOT_READY/INCOMPLETE plus trust acknowledgement, cancel and close-during-run cleanup, then uninstalled. Local installer SHA-256: `65997e2c48743f1de88323713609f227201bff510fbe837c8fb3c1ea125bf1f3`. This validates the dirty worktree locally, not remote CI.
+- **Current worktree delta:** `apps/desktop/e2e/installed-app.mjs`, `benchmarks/run-bench.ts`, `benchmarks/setup-fixtures.ts`, and new `benchmarks/run-bench.test.ts`, plus evidence updates in this ledger and blueprint files 02, 14, 15 and 16. Preserve all changes; inspect and commit as a cohesive benchmark-integrity + packaged-E2E phase. Benchmark setup rewrote a tracked fixture's trailing newline during the run; that generated-only difference has been removed.
+- **Working status:** the milestone is not complete from parent-SHA CI or dirty local results. Exact-SHA CI is still required after commit. P0/P1 acceptance rows in `17_ACCEPTANCE_CRITERIA.md` and `20_FINAL_CHECKLIST.md` remain controlling; report schema/security review, broad accessibility review, and any unverified final-SHA gates must be closed or explicitly handed to Stage C.
+
+The detailed evidence table and requirement-group snapshot below records the earlier `ca89f52` checkpoint unless an entry explicitly names another SHA. It is retained as historical evidence, not as a claim about the current HEAD or dirty worktree. Re-evaluate every row at the final implementation SHA.
+
 **Snapshot:** 2026-09-27
 
 **Branch:** `codex/core-hardening-before-desktop`

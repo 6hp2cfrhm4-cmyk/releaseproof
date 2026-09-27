@@ -103,6 +103,36 @@ if (path.dirname(resolvedUserData) !== tempRoot || !path.basename(resolvedUserDa
   throw new Error('Refusing to use an unexpected Desktop E2E user-data directory.');
 }
 
+const generatedProjects = [];
+async function createGeneratedProject(name, packageJson, config) {
+  const project = await fs.mkdtemp(path.join(tempRoot, `releaseproof-desktop-${name}-`));
+  if (path.dirname(path.resolve(project)) !== tempRoot || !path.basename(project).startsWith(`releaseproof-desktop-${name}-`)) {
+    throw new Error('Refusing to use an unexpected generated Desktop test project.');
+  }
+  generatedProjects.push(project);
+  await fs.writeFile(path.join(project, 'package.json'), JSON.stringify(packageJson, null, 2));
+  await fs.writeFile(path.join(project, '.releaseproof.json'), JSON.stringify(config, null, 2));
+  return project;
+}
+
+async function verifyThroughRenderer(page, project, expectedVerdict, expectedHeading, timeoutMs = 60000) {
+  await page.evaluate(async (selectedProject) => window.releaseproof.previewProject(selectedProject), project);
+  await page.reload();
+  await page.locator('.app-shell').waitFor({ timeout: 10000 });
+  await page.getByRole('button', { name: 'Home / Project', exact: true }).click();
+  await page.getByRole('button', { name: project, exact: true }).click();
+  const verifyButton = page.getByRole('button', { name: 'Verify Project', exact: true });
+  assert.equal(await verifyButton.isDisabled(), true, 'Verification must require explicit project-script trust acknowledgement.');
+  await page.locator('.trust input').check();
+  assert.equal(await verifyButton.isEnabled(), true, 'Runnable selected target should be verifiable after trust acknowledgement.');
+  await verifyButton.click();
+  await page.getByRole('heading', { name: expectedHeading, exact: true }).waitFor({ timeout: timeoutMs });
+  const report = JSON.parse(await fs.readFile(path.join(project, '.releaseproof', 'report.json'), 'utf8'));
+  assert.equal(report.verdict, expectedVerdict);
+  assert.equal(report.runStatus, 'completed');
+  return report;
+}
+
 let session;
 try {
   // Keep normal Windows/system paths but remove every directory that supplies
@@ -144,33 +174,8 @@ try {
   session = await launchAndAttach(userData, process.env);
   let { page, child } = session;
   console.log('Packaged Desktop opened; running the selected fixture through its worker.');
-  await page.getByRole('button', { name: projectPath, exact: true }).click();
-  const result = await page.evaluate(async (selectedProject) => {
-    const preview = await window.releaseproof.previewProject(selectedProject);
-    const target = preview.profile.targetCandidates.find((candidate) => candidate.runnable);
-    if (!target) throw new Error('The E2E project has no detected runnable target.');
-
-    let runId;
-    let unsubscribe = () => {};
-    const resultPromise = new Promise((resolve, reject) => {
-      unsubscribe = window.releaseproof.subscribeRun((event) => {
-        if (event.runId !== runId) return;
-        if (event.type === 'finished') resolve({ runId, report: event.report });
-        if (event.type === 'error') reject(new Error(event.message));
-      });
-    });
-    runId = await window.releaseproof.startVerification({
-      projectPath: selectedProject,
-      ...(target.path !== '.' ? { target: target.path } : {}),
-      trusted: true,
-      timeoutMs: 60000,
-    });
-    try { return await resultPromise; } finally { unsubscribe(); }
-  }, projectPath);
-
-  assert.equal(result.report.runStatus, 'completed');
-  assert.equal(result.report.verdict, 'READY', JSON.stringify(result.report.checks.filter((check) => check.status === 'block' || check.status === 'unknown')));
-  await page.getByRole('button', { name: 'Overview' }).click();
+  const readyReport = await verifyThroughRenderer(page, projectPath, 'READY', 'READY TO SHIP');
+  assert.equal(readyReport.verdict, 'READY', JSON.stringify(readyReport.checks.filter((check) => check.status === 'block' || check.status === 'unknown')));
   await page.getByRole('button', { name: 'Copy for AI' }).waitFor({ timeout: 15000 });
   await page.getByRole('button', { name: 'Copy for AI' }).click();
   await page.getByText('Copied sanitized handoff to clipboard.').waitFor({ timeout: 5000 });
@@ -234,7 +239,26 @@ try {
   for (const artifact of ['report.json', 'report.html', 'RELEASEPROOF_FIX.md']) {
     await fs.access(path.join(projectPath, '.releaseproof', artifact));
   }
-  console.log(JSON.stringify({ verdict: result.report.verdict, score: result.report.score, target: result.report.target, artifacts: path.join(projectPath, '.releaseproof') }));
+  console.log(JSON.stringify({ verdict: readyReport.verdict, score: readyReport.score, target: readyReport.target, artifacts: path.join(projectPath, '.releaseproof') }));
+
+  const notReadyProject = await createGeneratedProject('not-ready', {
+    name: 'desktop-not-ready-e2e',
+    scripts: {
+      build: 'node -e "process.exit(23)"',
+      start: 'node -e "require(\'node:http\').createServer((_q,r)=>r.end(\'ok\')).listen(Number(process.env.PORT),\'127.0.0.1\')"',
+    },
+  }, { checks: { install: false, browser: false, routes: false, environment: false, secrets: false, documentation: false, devProd: false } });
+  const notReadyReport = await verifyThroughRenderer(page, notReadyProject, 'NOT_READY', 'NOT READY TO SHIP');
+  assert.ok(notReadyReport.checks.some((check) => check.status === 'block'), 'NOT READY UI result must have a verified blocker.');
+
+  const incompleteProject = await createGeneratedProject('incomplete', {
+    name: 'desktop-incomplete-e2e',
+    scripts: { start: 'node -e "setInterval(()=>{},10000)"' },
+  }, { checks: { install: false, build: false, browser: false, routes: false, environment: false, secrets: false, documentation: false, devProd: false } });
+  await page.evaluate(() => window.releaseproof.updateSettings({ defaultTimeoutMs: 1000 }));
+  const incompleteReport = await verifyThroughRenderer(page, incompleteProject, 'INCOMPLETE', 'VERIFICATION INCOMPLETE', 30000);
+  assert.ok(incompleteReport.checks.some((check) => check.status === 'unknown'), 'INCOMPLETE UI result must retain the unverified startup reason.');
+  await page.evaluate(() => window.releaseproof.updateSettings({ defaultTimeoutMs: 30000 }));
 
   const hangingProject = process.env.RELEASEPROOF_E2E_HANGING_PROJECT
     ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../fixtures/hanging-start-command');
@@ -311,4 +335,9 @@ try {
 } finally {
   if (session) await closeAttachedApp(session).catch(() => {});
   await removeTestUserData(resolvedUserData);
+  for (const project of generatedProjects) {
+    if (path.dirname(path.resolve(project)) === tempRoot && path.basename(project).startsWith('releaseproof-desktop-')) {
+      await fs.rm(project, { recursive: true, force: true });
+    }
+  }
 }

@@ -1,58 +1,62 @@
 # Current repository state — 2026-09-27
 
-This is the baseline for the next implementation/review stage. It is a dated, evidence-labelled snapshot, not a substitute for rerunning the commands on the final source SHA. The target blueprint remains normative; this file records what is actually present now.
+This is an evidence-labelled snapshot for the implementation/review stage. Re-run the baseline on the actual checkout before making changes. The numbered blueprint is normative for the target product; this file records the observed baseline and its limits.
 
 ## Git and GitHub — VERIFIED
 
 | Item | Observed state |
 | --- | --- |
-| Branch / HEAD | `codex/core-hardening-before-desktop` / `6455c5028de4d82f15a8220ae7ed2b1826ce046e` |
-| Worktree | source changes are committed; four evidence documents and a newline-only fixture diff are uncommitted at this snapshot |
-| Remote | `origin` = `https://github.com/6hp2cfrhm4-cmyk/releaseproof.git` |
-| PR | draft PR #1, `Core hardening before desktop`, base `main`, head `6455c50`, open |
-| Tag/release | historical `v0.1.0` exists and is not to be moved or replaced |
-| Worktrees | one worktree at `C:/Users/alex/Desktop/megaproekt/RealiseProof` |
-| Recent commits | `6455c50` hanging-start benchmark expectation; `549a679` verifier/Desktop/installer acceptance hardening; `a782af1` report/IPC/Action gates; `29b700f` CI policy/FAST timeout; `ea03d8e` Desktop typecheck |
+| Branch / HEAD | `codex/core-hardening-before-desktop` / `5a8cee6025f1d0db5f81b0e9be922d68c2e5bdb0` |
+| Worktree at initial inspection | One existing uncommitted change: `apps/desktop/e2e/installed-app.mjs`; implementation work subsequently added benchmark integrity changes, tests, and updated this evidence ledger. See the latest checkpoint below for the current dirty set. |
+| Remote branch | `origin/codex/core-hardening-before-desktop` points to the same `5a8cee6025f1d0db5f81b0e9be922d68c2e5bdb0` at inspection. |
+| PR | Draft PR #1, “Core hardening before desktop”, base `main`, open; head SHA matches current HEAD. |
+| Historical tag | `v0.1.0` resolves to `d03eae2e2b828d551d897669f0e4f4925b64ab14` in this checkout. It is immutable; do not move, replace, or overwrite its release assets. |
+| Worktrees | One worktree: `C:/Users/alex/Desktop/megaproekt/RealiseProof`. |
+| Recent commits | `5a8cee6` records verified implementation gates; preceding commits add Desktop doctor/accessibility/worker-crash coverage, report/IPC/Action gates, and Core/Desktop acceptance hardening. Run `git log --oneline -15` for the authoritative list. |
 
-The development branch was explicitly authorized for CI push. That authorization does not authorize merge, tag movement, npm publication or a GitHub Release.
+The owner previously authorized pushing this development branch for CI. That does not authorize merge, tag movement, npm publication, or a GitHub Release. This blueprint pass performs none of those actions.
+
+## Latest local implementation checkpoint — VERIFIED on dirty working tree
+
+After the initial snapshot, the packaged E2E extension and benchmark validation were exercised locally. `pnpm test` passed 25 files (90 passed, 1 skipped); `pnpm run build`, `pnpm run lint`, benchmark-package TypeScript check, and E2E syntax check passed. The full AUTHORITATIVE benchmark passed 42 fixtures (TP 12 / TN 30 / FP 0 / FN 0; 0 expectation mismatches; 0 execution errors; 7 external cases; 794.0 seconds) on Windows 11 / Node 24.19.0. The output explicitly reported source commit `5a8cee6025f1d0db5f81b0e9be922d68c2e5bdb0` and `Working tree: DIRTY`.
+
+The Windows NSIS installer was rebuilt locally as `ReleaseProof-Setup-0.2.0-dev.0.exe`, installed into a unique temporary directory, launched without Node/pnpm/Corepack on PATH, and ran the installed-app E2E successfully, then uninstalled cleanly. The local installer SHA-256 was `65997e2c48743f1de88323713609f227201bff510fbe837c8fb3c1ea125bf1f3`. The revised E2E requires the normal trust acknowledgement and asserts READY, NOT_READY, and INCOMPLETE UI outcomes. This is local dirty-tree evidence, not CI evidence.
+
+The current diff also hardens benchmark expectations/selections/metrics and adds five tests. Its source provenance distinguishes the git commit from clean/dirty working-tree state; no claim that the dirty benchmark equals the committed source is intended. Exact-SHA CI on the eventual commit remains required.
 
 ## Repository architecture — VERIFIED by current files
 
-- Root is a private pnpm workspace (`pnpm-lock.yaml` v9) with `packages/*`, `apps/*` and `benchmarks`; product version is `0.2.0-dev.0`, Node engine is `>=20`.
-- CLI: `apps/cli/src/index.ts` and `commands/{verify,doctor,report,vibe,clean}.ts`; it invokes `@releaseproof/core` and the reporter. The default command is the verify alias.
-- Core packages: `schemas`, `detector`, `runner`, `sandbox` (clean copy), `browser` (Playwright + HTTP crawler), `environment`, `security`, `core`, and `reporter`.
-- Desktop now exists at `apps/desktop`: Electron main (`src/main/main.ts`), preload (`src/preload/index.ts`), renderer (`src/renderer/main.tsx` + CSS), forked worker (`src/worker/verify.ts`), shared DTOs (`src/shared/ipc.ts`), Vite and electron-builder configuration. The worker calls `@releaseproof/core`; no second verifier is intended.
-- Desktop has `nodeIntegration:false`, `contextIsolation:true`, `sandbox:true`, a CSP in the renderer HTML, deny-by-default navigation/window opening, folder picker, detection preview, trust acknowledgement, recent paths, settings, progress, cancel, result, findings/evidence/log views and artifact/clipboard actions. These are code-presence observations, not complete UX/E2E proof.
-- Windows packaging configuration produces `ReleaseProof-Setup-${version}.exe`, Start Menu shortcut and uninstall metadata. Installer packaging exists; installed metadata/icon inspection and full installed-app verification remain gates.
-- `action.yml` is a repository-local composite Action that builds the checked-out repository, runs the bundled CLI and writes declared outputs. It is not an npm dependency.
+- Root is a private pnpm workspace (`pnpm-lock.yaml`, lockfile version 9) containing `packages/*`, `apps/*`, and `benchmarks`. Development version is `0.2.0-dev.0`; CLI package requires Node `>=20`.
+- The Desktop manifest declares React/React DOM `^19.1.1`, Electron `^37.5.1`, Vite `^7.1.5`, electron-builder `^26.0.12`, TypeScript `^5.7.3`, and Playwright `^1.50.1`; exact resolved versions are in the committed lockfile. The local shell reported pnpm `12.3.4`, while CI installs pnpm 9. The root manifest does not declare a `packageManager` pin. Treat this as a reproducibility/toolchain decision for the implementation agent, not permission to change versions casually.
+- CLI lives at `apps/cli/src/index.ts` with `commands/{verify,doctor,report,vibe,clean}.ts`; it calls `@releaseproof/core` and the reporter. The root `releaseproof` invocation defaults to verification.
+- Core packages are `schemas`, `detector`, `runner`, `sandbox` (clean-workspace copy), `browser` (Playwright plus HTTP crawler), `environment`, `security`, `core`, and `reporter`.
+- Desktop exists at `apps/desktop`: Electron main `src/main/main.ts`, preload `src/preload/index.cts`, renderer `src/renderer/main.tsx` and CSS, forked worker `src/worker/verify.ts`, shared DTOs `src/shared/ipc.ts`, Vite config, and electron-builder config. The worker calls `@releaseproof/core`; Desktop is not intended to contain separate verifier logic.
+- Desktop source config includes `nodeIntegration: false`, `contextIsolation: true`, sandboxing, CSP, deny-by-default navigation/window opening, project selection/preview, trust acknowledgement, recents/settings, progress/cancel, findings/evidence/logs and report/clipboard actions. These are source-presence facts, not proof that every flow is correct.
+- Windows NSIS configuration builds `ReleaseProof-Setup-${version}.exe`, with Start Menu and uninstall configuration. A Windows installer smoke job exists; see the evidence boundary below for exactly what its current committed test exercises.
+- `action.yml` is a repository-local composite Action: it builds and runs this checkout's bundled CLI, then writes Action outputs. It does not depend on an npm-published `releaseproof` package.
 
-## Local evidence — VERIFIED for this checkout where stated
+## Exact-HEAD CI — VERIFIED
 
-- Fresh 2026-09-27 rerun on `6455c50`: `pnpm run build` and `pnpm run lint` passed; `pnpm test` passed with 23 files, 83 passed, 1 skipped (84 total).
-- Local Windows authoritative benchmark on `6455c50`: 42 fixtures, TP 12, TN 30, FP 0, FN 0, zero expectation mismatches/errors, seven external-dependency cases, 652.5 seconds. Windows Node 20 hosted CI independently passed the same 42-case gate in 1044.0 seconds. The changed TP/TN split reflects the corrected expected classification of an indeterminate hanging startup, not a hidden mismatch.
-- Windows CI installed the generated Setup exe silently, launched/version-checked the installed application, and silently uninstalled it successfully. This does not prove verification of a project from the installed app, Start Menu shortcut behavior, icon rendering or upgrade behavior.
-- Several `releaseproof-*` directories remain under the user temp directory from earlier diagnostics. They are outside the repository and were deliberately not deleted during this read-only blueprint pass; final lifecycle acceptance must distinguish pre-existing residue from residue created by the final run and verify success/failure/cancel cleanup.
+GitHub Actions run [36297402432](https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/runs/36297402432) completed successfully for exact HEAD `5a8cee6025f1d0db5f81b0e9be922d68c2e5bdb0`. All nine jobs passed: six Windows/Ubuntu/macOS × Node 20/22 matrix jobs, Composite Action E2E, bundled CLI tarball E2E, and Windows Desktop build/installer smoke. The matrix runs build, typecheck, tests and a small FAST benchmark smoke; Ubuntu and Windows Node 20 each run the 42-fixture authoritative benchmark. The installer job builds an NSIS EXE, installs it, launches the app, exercises the packaged-app script present on that SHA, and uninstalls. This green run is evidence only for code committed at `5a8cee6`; it does not include the uncommitted E2E expansion described below.
 
-## Remote CI — VERIFIED status at snapshot time
+The committed installer script exercises the healthy READY project through the installed app and checks artifacts, plus worker/lifecycle behavior. It does not prove that the actual UI renders both non-READY verdicts or that the normal Verify button enforces trust acknowledgement. The current uncommitted edit adds those UI assertions and generated NOT_READY/INCOMPLETE projects. Prior-turn handoff reports that `node --check`, a local build/install, the revised installed-app E2E and uninstall passed; this pass has not independently rerun those commands. Treat that local result as handoff evidence on the working-tree version, not as exact-HEAD CI evidence.
 
-Run `36281327249` targets `6455c50` and completed successfully: <https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/runs/36281327249>. Desktop installer install/launch/uninstall smoke, CLI tarball E2E, Action E2E and all six Windows/Ubuntu/macOS × Node 20/22 jobs passed. Windows Node 20 authoritative benchmark reported 42 fixtures, TP 12, TN 30, FP 0, FN 0, zero mismatches/errors and seven external cases. FAST smoke and dogfood checks passed under the expected `INCOMPLETE` monorepo-root policy.
+## Existing local/remote evidence and boundaries
 
-The matrix includes six OS/Node cells, Action E2E, CLI tarball E2E, Windows authoritative benchmark and Windows installer install/launch/uninstall smoke. Full installed-app project-verification E2E, Desktop parity and complete IPC/lifecycle tests remain open gates.
+- The exact-HEAD run above is the current authoritative CI reference. Older green runs at `ca89f52`/`6455c50` remain historical and must not be cited as final-SHA evidence when newer source changes affect the gate.
+- The local Windows benchmark and test counts recorded in prior status documents were run on earlier source revisions. Do not carry their exact metrics to `5a8cee6` without rerunning locally. The exact-HEAD Windows Node 20 benchmark is the current recorded 42-case gate.
+- `docs/REAL_WORLD_VALIDATION.md` records ten pinned upstream repositories, including refreshed SHAs for six historical pins that became unreachable. The current corpus implementation under test was ReleaseProof `2357e45`, not this later HEAD. Three repositories were READY, one NOT_READY, and six INCOMPLETE (11 target runs because one repository has two targets). Keep original and refreshed pins/outcomes separate. `hackathon-starter` remains unresolved INCOMPLETE; do not infer a failure cause.
+- The report schemas and artifacts exist, but the independent schema-version/migration, complete capability/evidence contract, atomic cross-artifact consistency, and final-sha redaction/trust audit remain acceptance checks.
+- Existing source includes tests for Core/CLI, runner/process, browser, Action, Desktop worker/renderer and package behavior. Test presence is not the same as full real-process, browser, packaged UI, accessibility or cleanup coverage; use [12](12_TESTING_STRATEGY.md), [17](17_ACCEPTANCE_CRITERIA.md), and [20](20_FINAL_CHECKLIST.md).
 
-## Real-world corpus — VERIFIED as historical working-tree record, not final gate
+## Known incomplete gates — NOT VERIFIED unless evidence is added on the final SHA
 
-`docs/REAL_WORLD_VALIDATION.md` now records the final-SHA Windows reruns for ten repositories: three READY, one NOT_READY and six INCOMPLETE. Four original pins were rerun unchanged and six repositories use refreshed pins explicitly authorized by the user; the unreachable old hashes and earlier outcomes remain historical. Environment was Windows 11 build 26200, Node 24.19.0, Python 3.12.14 with lockfile-compatible package managers. `hackathon-starter` still has an unresolved 60-second readiness timeout and is INCOMPLETE, not guessed broken.
+- The packaged E2E extension has passed locally but has not been exercised by CI. After it is committed, run the exact-SHA Windows installer job and require all three verdicts plus trust-gate behavior through the real renderer.
+- Re-run build, typecheck, full tests and the full authoritative benchmark on the final source SHA. Local dirty-tree evidence and green CI at its parent commit do not cover the eventual commit.
+- Complete the P0/P1 schema, report atomicity/consistency, environment propagation, secret redaction, filesystem/path/trust and owned-process cleanup checks in [17](17_ACCEPTANCE_CRITERIA.md).
+- Complete broad keyboard/screen-reader/contrast/reduced-motion and narrow-window accessibility review; sampled checks are not a full audit.
+- The current branch is development-only. Stage C independent review must precede merge/release; do not publish a new release during implementation.
 
-## Known incomplete gates — EXPECTED / NOT VERIFIED
+## Evidence labels
 
-- Desktop has implementation code but lacks a complete automated Electron E2E and five-case CLI/Desktop parity suite.
-- Worker/main lifecycle needs real tests for close, worker crash, cancellation, force cleanup, event bounds and foreign-port safety. Current `before-quit` has a bounded exit fallback; it is not proof that every child is reaped.
-- Current report schemas contain useful fields and cancellation/blocker invariants, but the independent `schemaVersion: 1.0.0` contract, migration policy, artifact hashes and full evidence/capability model still need completion.
-- Current Desktop `System Doctor`, evidence/log presentation and finding copy are functional scaffolds; target behavior in [07](07_DESKTOP_PRODUCT_SPEC.md) is broader than current code.
-- Action exposes `path`, `target`, `port`, `timeout`, `fail-on-blocker` and `fail-on-incomplete`; healthy/blocker/incomplete policy E2E is verified in run `36281327249`.
-- Windows installer CI installs, launches/version-checks and uninstalls the packaged application. Project verification from the installed app, icon rendering and Start Menu behavior remain NOT VERIFIED.
-- The release remains development-only. Stage C review, new immutable version/tag, downloaded-artifact verification and public release are out of scope here.
-
-## Evidence rule
-
-`VERIFIED` means directly observed in this checkout or linked to a named run/SHA. `INFERRED` means a design conclusion from inspected code. `NOT VERIFIED` means an explicit missing gate. `EXPECTED` means the future contract in files 00–20. Never promote code presence, a prior commit's CI or a partial installer smoke into a final readiness claim.
+`VERIFIED` means observed in this checkout or backed by a named exact-SHA run. `INFERRED` means a conclusion from inspected code. `NOT VERIFIED` means the evidence is absent or does not cover the claim. `EXPECTED` means a future contract in files 00–20. Never promote code presence, a prior commit's CI, or a partial installer smoke to a final readiness claim.

@@ -1,8 +1,10 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import pc from 'picocolors';
 import { verifyProject } from '@releaseproof/core';
+import { CheckCategorySchema, type CheckCategory } from '@releaseproof/schemas';
 import { allFixtures, cleanupFixtureArtifacts } from './setup-fixtures.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -10,13 +12,100 @@ const fixturesRoot = path.resolve(__dirname, '..', 'fixtures');
 
 interface FixtureExpected {
   expectedVerdict: 'READY' | 'NOT_READY' | 'INCOMPLETE';
-  expectedBlockerCategory?: string;
-  expectedWarningCategory?: string;
+  expectedBlockerCategory?: CheckCategory;
+  expectedWarningCategory?: CheckCategory;
+  expectedBlockerCheckId?: string;
   minBlockers?: number;
   minWarnings?: number;
   maxBlockers?: number;
   maxWarnings?: number;
   expectedBrowserVerification?: 'VERIFIED' | 'HTTP_FALLBACK' | 'UNAVAILABLE' | 'SKIPPED';
+}
+
+const verdicts = new Set(['READY', 'NOT_READY', 'INCOMPLETE']);
+const browserModes = new Set(['VERIFIED', 'HTTP_FALLBACK', 'UNAVAILABLE', 'SKIPPED']);
+const countFields = ['minBlockers', 'minWarnings', 'maxBlockers', 'maxWarnings'] as const;
+
+export function parseFixtureExpected(raw: string, fixtureName: string): FixtureExpected {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`Fixture ${fixtureName} has invalid expected.json: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`Fixture ${fixtureName} expected.json must contain an object.`);
+  }
+  const record = value as Record<string, unknown>;
+  const allowedKeys = new Set([
+    'expectedVerdict', 'expectedBlockerCategory', 'expectedWarningCategory', 'expectedBlockerCheckId',
+    ...countFields, 'expectedBrowserVerification',
+  ]);
+  const unknownKeys = Object.keys(record).filter((key) => !allowedKeys.has(key));
+  if (unknownKeys.length > 0) {
+    throw new Error(`Fixture ${fixtureName} expected.json contains unsupported field(s): ${unknownKeys.join(', ')}.`);
+  }
+  if (typeof record.expectedVerdict !== 'string' || !verdicts.has(record.expectedVerdict)) {
+    throw new Error(`Fixture ${fixtureName} expected.json must declare expectedVerdict as READY, NOT_READY, or INCOMPLETE.`);
+  }
+  for (const key of ['expectedBlockerCategory', 'expectedWarningCategory'] as const) {
+    const category = record[key];
+    if (category !== undefined && !CheckCategorySchema.safeParse(category).success) {
+      throw new Error(`Fixture ${fixtureName} expected.json has invalid ${key}.`);
+    }
+  }
+  if (record.expectedBlockerCheckId !== undefined
+    && (typeof record.expectedBlockerCheckId !== 'string' || record.expectedBlockerCheckId.trim() === '')) {
+    throw new Error(`Fixture ${fixtureName} expected.json has invalid expectedBlockerCheckId.`);
+  }
+  if (record.expectedBrowserVerification !== undefined
+    && (typeof record.expectedBrowserVerification !== 'string' || !browserModes.has(record.expectedBrowserVerification))) {
+    throw new Error(`Fixture ${fixtureName} expected.json has invalid expectedBrowserVerification.`);
+  }
+  for (const key of countFields) {
+    const count = record[key];
+    if (count !== undefined && (!Number.isInteger(count) || Number(count) < 0)) {
+      throw new Error(`Fixture ${fixtureName} expected.json has invalid ${key}; use a non-negative integer.`);
+    }
+  }
+  if (record.minBlockers !== undefined && record.maxBlockers !== undefined
+    && Number(record.minBlockers) > Number(record.maxBlockers)) {
+    throw new Error(`Fixture ${fixtureName} expected.json has minBlockers greater than maxBlockers.`);
+  }
+  if (record.minWarnings !== undefined && record.maxWarnings !== undefined
+    && Number(record.minWarnings) > Number(record.maxWarnings)) {
+    throw new Error(`Fixture ${fixtureName} expected.json has minWarnings greater than maxWarnings.`);
+  }
+  return record as unknown as FixtureExpected;
+}
+
+export async function loadFixtureExpected(filePath: string, fixtureName: string): Promise<FixtureExpected> {
+  const raw = await fs.readFile(filePath, 'utf-8').catch((error: unknown) => {
+    throw new Error(`Fixture ${fixtureName} is missing expected.json: ${error instanceof Error ? error.message : String(error)}`);
+  });
+  return parseFixtureExpected(raw, fixtureName);
+}
+
+export function selectBenchmarkFixtures(
+  declaredNames: readonly string[],
+  requestedNames: readonly string[],
+): string[] {
+  const known = new Set(declaredNames);
+  const unknown = requestedNames.filter((name) => !known.has(name));
+  if (unknown.length > 0) {
+    throw new Error(`Unknown benchmark fixture selection: ${unknown.join(', ')}.`);
+  }
+  const selected = requestedNames.length > 0
+    ? [...new Set(requestedNames)]
+    : [...declaredNames];
+  if (selected.length === 0) {
+    throw new Error('Benchmark fixture selection is empty; refusing to report a vacuous pass.');
+  }
+  return selected;
+}
+
+export function formatMetric(numerator: number, denominator: number): string {
+  return denominator > 0 ? `${((numerator / denominator) * 100).toFixed(1)}%` : 'N/A';
 }
 
 interface BenchResult {
@@ -52,12 +141,19 @@ export async function runBenchmark(): Promise<void> {
       .map((name) => name.trim())
       .filter(Boolean)
   );
-  const fixtureDirs = entries
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .filter((name) => requestedFixtures.size === 0 || requestedFixtures.has(name));
+  const fixtureDirs = selectBenchmarkFixtures(
+    allFixtures.map((fixture) => fixture.name),
+    [...requestedFixtures],
+  );
+  const actualDirectories = new Set(entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name));
+  const missingDirectories = fixtureDirs.filter((name) => !actualDirectories.has(name));
+  if (missingDirectories.length > 0) {
+    throw new Error(`Benchmark fixtures are missing from disk: ${missingDirectories.join(', ')}. Run setup-fixtures first.`);
+  }
 
   const results: BenchResult[] = [];
+  let expectationMismatches = 0;
+  let executionErrors = 0;
   let tp = 0; // True Positives: broken apps correctly blocked
   let tn = 0; // True Negatives: working / env-incomplete apps not falsely blocked
   let fp = 0; // False Positives: working apps falsely blocked (False Blockers)
@@ -69,11 +165,7 @@ export async function runBenchmark(): Promise<void> {
     const fixDir = path.join(fixturesRoot, name);
     const expectedPath = path.join(fixDir, 'expected.json');
 
-    let expected: FixtureExpected = { expectedVerdict: 'READY' };
-    try {
-      const raw = await fs.readFile(expectedPath, 'utf-8');
-      expected = JSON.parse(raw);
-    } catch {}
+    const expected = await loadFixtureExpected(expectedPath, name);
 
     const start = Date.now();
     try {
@@ -123,8 +215,9 @@ export async function runBenchmark(): Promise<void> {
       const blockerCategories = new Set(report.checks.filter((c) => c.status === 'block').map((c) => c.category));
       const warningCategories = new Set(report.checks.filter((c) => c.status === 'warn').map((c) => c.category));
       const match = report.verdict === expected.expectedVerdict
-        && (expected.expectedBlockerCategory === undefined || blockerCategories.has(expected.expectedBlockerCategory as any))
-        && (expected.expectedWarningCategory === undefined || warningCategories.has(expected.expectedWarningCategory as any))
+        && (expected.expectedBlockerCategory === undefined || blockerCategories.has(expected.expectedBlockerCategory))
+        && (expected.expectedWarningCategory === undefined || warningCategories.has(expected.expectedWarningCategory))
+        && (expected.expectedBlockerCheckId === undefined || report.checks.some((check) => check.id === expected.expectedBlockerCheckId && check.status === 'block'))
         && (expected.minBlockers === undefined || report.counts.blockers >= expected.minBlockers)
         && (expected.maxBlockers === undefined || report.counts.blockers <= expected.maxBlockers)
         && (expected.minWarnings === undefined || report.counts.warnings >= expected.minWarnings)
@@ -149,6 +242,7 @@ export async function runBenchmark(): Promise<void> {
       const verdictStr = report.verdict.padEnd(10, ' ');
       console.log(`  ${mark} ${name.padEnd(30, ' ')} ${verdictStr} (${report.counts.blockers}b, ${report.counts.warnings}w, ${report.counts.unknown}u) ${pc.dim(timeStr)}`);
       if (!match) {
+        expectationMismatches++;
         console.log(`    expected=${expected.expectedVerdict}` +
           ` blockerCategory=${expected.expectedBlockerCategory ?? '-'} warningCategory=${expected.expectedWarningCategory ?? '-'} browser=${expected.expectedBrowserVerification ?? '-'}`);
         console.log(`    actual blockers=${[...blockerCategories].join(',') || '-'} warnings=${[...warningCategories].join(',') || '-'} browser=${report.browserVerification.status}`);
@@ -157,6 +251,7 @@ export async function runBenchmark(): Promise<void> {
         }
       }
     } catch (err: unknown) {
+      executionErrors++;
       console.log(`  ${pc.red('✗')} ${name.padEnd(30, ' ')} ERROR: ${err}`);
       results.push({
         name,
@@ -176,33 +271,63 @@ export async function runBenchmark(): Promise<void> {
     }
   }
 
-  const precision = (tp + fp) > 0 ? ((tp / (tp + fp)) * 100).toFixed(1) : '100.0';
-  const recall = (tp + fn) > 0 ? ((tp / (tp + fn)) * 100).toFixed(1) : '100.0';
+  const precision = formatMetric(tp, tp + fp);
+  const recall = formatMetric(tp, tp + fn);
 
   console.log('');
   console.log(pc.bold('Benchmark Results:'));
   console.log(pc.dim('─'.repeat(45)));
+  console.log(`  Source commit:         ${sourceSha()}`);
+  console.log(`  Working tree:          ${sourceTreeState()}`);
+  console.log(`  Platform / Node:       ${process.platform}/${process.arch} · ${process.version}`);
   console.log(`  Total Fixtures:        ${results.length}`);
   console.log(`  True Positives (TP):   ${pc.green(String(tp))}`);
   console.log(`  True Negatives (TN):   ${pc.green(String(tn))}`);
   console.log(`  False Positives (FP):  ${fp === 0 ? pc.green('0 (TARGET MET)') : pc.red(String(fp))}`);
   console.log(`  False Negatives (FN):  ${fn === 0 ? pc.green('0') : pc.yellow(String(fn))}`);
-  console.log(`  Blocker Precision:     ${pc.green(precision + '%')}`);
-  console.log(`  Blocker Recall:        ${pc.green(recall + '%')}`);
+  console.log(`  Blocker Precision:     ${pc.green(precision)}`);
+  console.log(`  Blocker Recall:        ${pc.green(recall)}`);
+  console.log(`  Expectation Mismatches:${String(expectationMismatches).padStart(4, ' ')}`);
+  console.log(`  Execution Errors:      ${String(executionErrors).padStart(4, ' ')}`);
   console.log(`  External Dependencies: ${pc.cyan(String(totalUnknowns))}`);
   console.log(`  Total Runtime:         ${(totalDuration / 1000).toFixed(1)}s`);
   console.log(pc.dim('─'.repeat(45)));
 
-  const failedCases = results.filter((result) => !result.passed).length;
-  if (fp > 0 || fn > 0 || failedCases > 0) {
-    console.error(pc.bold(pc.red(`\nFAILED: ${fp} false blocker(s), ${fn} missed bug(s), ${failedCases} expectation/error mismatch(es).`)));
+  if (fp > 0 || fn > 0 || expectationMismatches > 0 || executionErrors > 0) {
+    console.error(pc.bold(pc.red(`\nFAILED: ${fp} false blocker(s), ${fn} missed bug(s), ${expectationMismatches} expectation mismatch(es), ${executionErrors} execution error(s).`)));
     process.exitCode = 1;
   } else {
-    console.log(pc.bold(pc.green(`\nPASSED: Known False Blockers: 0! Precision: ${precision}%, Recall: ${recall}%.`)));
+    console.log(pc.bold(pc.green(`\nPASSED: FP ${fp}, FN ${fn}, expectation mismatches ${expectationMismatches}, execution errors ${executionErrors}; precision ${precision}, recall ${recall}.`)));
     process.exitCode = 0;
   }
+}
 
-  process.exit(process.exitCode ?? 0);
+function sourceSha(): string {
+  const configured = process.env.GITHUB_SHA ?? process.env.GITHUB_COMMIT;
+  if (configured && /^[a-f0-9]{40,64}$/i.test(configured)) return configured;
+  try {
+    const current = execFileSync('git', ['rev-parse', '--verify', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 3000,
+    }).trim();
+    return /^[a-f0-9]{40,64}$/i.test(current) ? current : 'unavailable';
+  } catch {
+    return 'unavailable';
+  }
+}
+
+function sourceTreeState(): 'CLEAN' | 'DIRTY' | 'UNKNOWN' {
+  try {
+    const status = execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 3000,
+    });
+    return status.trim() ? 'DIRTY' : 'CLEAN';
+  } catch {
+    return 'UNKNOWN';
+  }
 }
 
 if (process.argv[1] && process.argv[1].endsWith('run-bench.ts')) {
