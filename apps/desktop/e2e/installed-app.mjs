@@ -126,8 +126,13 @@ async function verifyThroughRenderer(page, project, expectedVerdict, expectedHea
   await page.locator('.trust input').check();
   assert.equal(await verifyButton.isEnabled(), true, 'Runnable selected target should be verifiable after trust acknowledgement.');
   await verifyButton.click();
+  await page.locator('[role="progressbar"]').waitFor({ timeout: 5000 });
+  assert.equal(await page.locator('[role="progressbar"]').getAttribute('aria-valuetext') !== null, true,
+    'Verification progress must have an accessible, truthful phase description.');
   await page.getByRole('heading', { name: expectedHeading, exact: true }).waitFor({ timeout: timeoutMs });
   await assertAccessibleControls(page, expectedHeading);
+  assert.equal(await page.locator('.run-state').getAttribute('aria-live'), 'polite', 'Run status must be announced to assistive technology.');
+  await assertVisibleTextContrast(page, `${expectedHeading} view`);
   const report = JSON.parse(await fs.readFile(path.join(project, '.releaseproof', 'report.json'), 'utf8'));
   assert.equal(report.verdict, expectedVerdict);
   assert.equal(report.runStatus, 'completed');
@@ -182,6 +187,13 @@ async function assertVisibleTextContrast(page, themeName) {
   assert.deepEqual(failures, [], `${themeName} visible text fails WCAG AA contrast: ${JSON.stringify(failures)}`);
 }
 
+async function assertReportViewsContrast(page, themeName) {
+  for (const view of ['Home / Project', 'Overview', 'Findings', 'Evidence', 'Logs', 'Doctor', 'Settings']) {
+    await page.getByRole('button', { name: view, exact: true }).click();
+    await assertVisibleTextContrast(page, `${themeName} ${view}`);
+  }
+}
+
 let session;
 try {
   // Keep normal Windows/system paths but remove every directory that supplies
@@ -192,6 +204,7 @@ try {
   }).join(path.delimiter);
   session = await launchAndAttach(userData, { ...process.env, PATH: pathWithoutNode, NODE_OPTIONS: '' });
   await assertAccessibleControls(session.page, 'Home');
+  await assertVisibleTextContrast(session.page, 'Initial system Home');
   await session.page.keyboard.press('Tab');
   const firstFocus = await session.page.evaluate(() => ({
     tag: document.activeElement?.tagName,
@@ -236,6 +249,7 @@ try {
   const firstFinding = page.locator('article.finding').first();
   const findingTitle = await firstFinding.locator('strong').innerText();
   await firstFinding.click();
+  assert.equal(await firstFinding.getAttribute('aria-pressed'), 'true', 'Selected finding state must be announced semantically.');
   await page.getByRole('button', { name: 'Copy Fix Prompt' }).click();
   await page.getByText('Copied sanitized handoff to clipboard.').waitFor({ timeout: 5000 });
   const copiedFinding = execFileSync('powershell.exe', ['-NoProfile', '-Command', 'Get-Clipboard -Raw'], { encoding: 'utf8' });
@@ -264,32 +278,35 @@ try {
   const themeSelect = page.locator('.setting-row select').first();
   await themeSelect.selectOption('light');
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
-  await page.getByRole('button', { name: 'Doctor', exact: true }).click();
-  await assertVisibleTextContrast(page, 'Light theme');
+  await assertReportViewsContrast(page, 'Light theme');
   await page.getByRole('button', { name: 'Settings' }).click();
   await themeSelect.selectOption('dark');
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
-  await page.getByRole('button', { name: 'Doctor', exact: true }).click();
-  await assertVisibleTextContrast(page, 'Dark theme');
+  await assertReportViewsContrast(page, 'Dark theme');
   await page.getByRole('button', { name: 'Settings' }).click();
+  await themeSelect.selectOption('system');
+  await page.waitForFunction(() => ['light', 'dark'].includes(document.documentElement.dataset.theme)
+    && document.documentElement.dataset.themePreference === 'system');
+  let systemTheme = await page.evaluate(() => document.documentElement.dataset.theme);
+  await assertReportViewsContrast(page, `System theme (${systemTheme})`);
+  await page.emulateMedia({ colorScheme: systemTheme === 'light' ? 'dark' : 'light' });
+  await page.waitForFunction((previousTheme) => document.documentElement.dataset.theme !== previousTheme, systemTheme);
+  systemTheme = await page.evaluate(() => document.documentElement.dataset.theme);
+  await assertReportViewsContrast(page, `System theme changed to ${systemTheme}`);
   await closeAttachedApp(session);
   session = undefined;
   session = await launchAndAttach(userData, process.env);
   page = session.page;
   child = session.child;
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
-  assert.equal(await page.locator('.setting-row select').first().inputValue(), 'dark', 'Theme selection was not persisted across application restart.');
-  const persistedThemeSelect = page.locator('.setting-row select').first();
-  await persistedThemeSelect.selectOption('system');
   await page.waitForFunction(() => ['light', 'dark'].includes(document.documentElement.dataset.theme)
     && document.documentElement.dataset.themePreference === 'system');
-  let systemTheme = await page.evaluate(() => document.documentElement.dataset.theme);
-  await assertVisibleTextContrast(page, `System theme (${systemTheme})`);
-  await page.emulateMedia({ colorScheme: systemTheme === 'light' ? 'dark' : 'light' });
-  await page.waitForFunction((previousTheme) => document.documentElement.dataset.theme !== previousTheme, systemTheme);
-  systemTheme = await page.evaluate(() => document.documentElement.dataset.theme);
-  await assertVisibleTextContrast(page, `System theme changed to ${systemTheme}`);
+  assert.equal(await page.locator('.setting-row select').first().inputValue(), 'system', 'System theme selection was not persisted across application restart.');
+  const persistedThemeSelect = page.locator('.setting-row select').first();
+  assert.equal(await page.evaluate(() => window.matchMedia('(prefers-color-scheme: light)').matches
+    ? document.documentElement.dataset.theme === 'light'
+    : document.documentElement.dataset.theme === 'dark'), true,
+  'System theme did not resolve to the current OS color scheme after restart.');
   for (const artifact of ['report.json', 'report.html', 'RELEASEPROOF_FIX.md']) {
     await fs.access(path.join(projectPath, '.releaseproof', artifact));
   }

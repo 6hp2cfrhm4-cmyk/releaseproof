@@ -59,6 +59,9 @@ http.createServer((req, res) => {
     const tamperedReportCommand = await runCli(['report', root, '--no-open']);
     expect(tamperedReportCommand.code).toBe(1);
     expect(tamperedReportCommand.stderr).toContain('No ReleaseProof report found.');
+    const tamperedVibeCommand = await runCli(['vibe', root]);
+    expect(tamperedVibeCommand.code).not.toBe(0);
+    expect(tamperedVibeCommand.stdout).not.toContain('Vibe check');
 
     const repeated = await runCli(['verify', root, '--port', String(cliPort), '--timeout', '8000', '--json', '--skip-sandbox']);
     expect(repeated.code, JSON.stringify(repeated)).toBe(0);
@@ -70,6 +73,19 @@ http.createServer((req, res) => {
     expect(await fs.readFile(path.join(artifactDir, 'report.html'), 'utf8')).toContain(`Report ${repeatedReport.id}`);
     expect(await fs.readFile(path.join(artifactDir, 'RELEASEPROOF_FIX.md'), 'utf8')).toContain(`**Report ID**: ${repeatedReport.id}`);
   }, 35000);
+
+  it('publishes and validates the complete report set when vibe performs the first verification', async () => {
+    const root = await createNodeFixture(roots, `require('node:http').createServer((_q,r)=>r.end('ok')).listen(Number(process.env.PORT),'127.0.0.1');`);
+    await fs.writeFile(path.join(root, '.releaseproof.json'), JSON.stringify({
+      checks: minimalChecks(),
+      start: { stabilityWindowMs: 100 },
+    }));
+
+    const result = await runCli(['vibe', root]);
+    expect(result.code, JSON.stringify(result)).toBe(0);
+    expect(result.stdout.length).toBeGreaterThan(0);
+    await expect(assertReportArtifactSet(path.join(root, '.releaseproof'))).resolves.toMatchObject({ runStatus: 'completed' });
+  }, 15000);
 
   it('uses stable exit codes for incomplete, not-ready, and internal-error outcomes', async () => {
     const root = await createNodeFixture(roots, `require('node:http').createServer((_q,r)=>r.end('ok')).listen(Number(process.env.PORT),'127.0.0.1');`);
