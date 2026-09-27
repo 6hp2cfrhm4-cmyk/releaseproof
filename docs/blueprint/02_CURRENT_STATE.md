@@ -22,7 +22,7 @@ On exact source commit `caedb07980edd365253313f1d6c9775b4ab3f6d6`, `pnpm test` p
 
 The Windows NSIS installer was rebuilt locally as `ReleaseProof-Setup-0.2.0-dev.0.exe`, installed into a unique temporary directory, launched without Node/pnpm/Corepack on PATH, and ran the installed-app E2E successfully, then uninstalled cleanly. The local installer SHA-256 was `65997e2c48743f1de88323713609f227201bff510fbe837c8fb3c1ea125bf1f3`. The revised E2E requires the normal trust acknowledgement and asserts READY, NOT_READY, and INCOMPLETE UI outcomes. This is local dirty-tree evidence, not CI evidence.
 
-The exact-SHA GitHub Actions run [36301498915](https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/runs/36301498915) passed all nine jobs on `caedb079`, including six OS/Node cells, Composite Action, CLI tarball and Windows packaged Desktop E2E. A subsequent uncommitted report-hardening change adds defensive AI-handoff fencing and one adversarial regression test; local reporter/security tests, build, lint/typecheck and the 25-file full test suite (91 passed, 1 skipped) pass for that dirty tree. Exact-SHA CI for this latter change is pending.
+GitHub Actions run [36302871428](https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/runs/36302871428) completed successfully for PR head `06c7e2a`. All nine jobs passed, including the handoff regression, six OS/Node cells, Action, CLI tarball and installed Windows E2E. Both 42-case authoritative benchmarks had TP 12 / TN 30 / FP 0 / FN 0 with no mismatches/errors. However, the Windows benchmark reported a `DIRTY` source tree (the Ubuntu benchmark reported `CLEAN`). The run used GitHub's PR merge-ref SHA `d146165225854255fc4537023a2e96cf605ebb9d`, not the branch head SHA. Treat the metrics as diagnostic, not a clean-source benchmark gate. The current uncommitted change makes authoritative runs report start/end status and changed paths and fail on dirty/unknown state; regression tests and docs are also uncommitted. Exact-SHA CI for this stricter provenance gate remains pending.
 
 ## Repository architecture — VERIFIED by current files
 
@@ -52,7 +52,7 @@ The committed installer script exercises the healthy READY project through the i
 ## Known incomplete gates — NOT VERIFIED unless evidence is added on the final SHA
 
 - The packaged E2E extension has passed locally but has not been exercised by CI. After it is committed, run the exact-SHA Windows installer job and require all three verdicts plus trust-gate behavior through the real renderer.
-- Re-run exact-SHA CI after the uncommitted AI-handoff safety change is committed. The current authoritative benchmark and CI are on `caedb079`; the security fix changes report generation and requires new CI evidence.
+- Identify why the PR Windows benchmark source tree is dirty and get a clean start/end authoritative result; the current run still had green metrics but does not satisfy the stricter source-integrity gate. Run exact-SHA CI after the current benchmark provenance enforcement is committed.
 - Complete the P0/P1 schema, report atomicity/consistency, environment propagation, secret redaction, filesystem/path/trust and owned-process cleanup checks in [17](17_ACCEPTANCE_CRITERIA.md).
 - Complete broad keyboard/screen-reader/contrast/reduced-motion and narrow-window accessibility review; sampled checks are not a full audit.
 - The current branch is development-only. Stage C independent review must precede merge/release; do not publish a new release during implementation.

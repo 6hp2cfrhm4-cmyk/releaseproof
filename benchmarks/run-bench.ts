@@ -108,6 +108,10 @@ export function formatMetric(numerator: number, denominator: number): string {
   return denominator > 0 ? `${((numerator / denominator) * 100).toFixed(1)}%` : 'N/A';
 }
 
+export function parseGitPorcelainStatus(status: string): string[] {
+  return status.split(/\r?\n/).filter((line) => line.length > 0);
+}
+
 interface BenchResult {
   name: string;
   verdict: 'READY' | 'NOT_READY' | 'INCOMPLETE' | 'CANCELLED';
@@ -151,6 +155,7 @@ export async function runBenchmark(): Promise<void> {
     throw new Error(`Benchmark fixtures are missing from disk: ${missingDirectories.join(', ')}. Run setup-fixtures first.`);
   }
 
+  const startingSourceChanges = sourceTreeChanges();
   const results: BenchResult[] = [];
   let expectationMismatches = 0;
   let executionErrors = 0;
@@ -273,12 +278,24 @@ export async function runBenchmark(): Promise<void> {
 
   const precision = formatMetric(tp, tp + fp);
   const recall = formatMetric(tp, tp + fn);
+  const sourceChanges = sourceTreeChanges();
+  const startingTree = startingSourceChanges === undefined ? 'UNKNOWN' : startingSourceChanges.length > 0 ? 'DIRTY' : 'CLEAN';
+  const sourceTree = sourceChanges === undefined ? 'UNKNOWN' : sourceChanges.length > 0 ? 'DIRTY' : 'CLEAN';
 
   console.log('');
   console.log(pc.bold('Benchmark Results:'));
   console.log(pc.dim('─'.repeat(45)));
   console.log(`  Source commit:         ${sourceSha()}`);
-  console.log(`  Working tree:          ${sourceTreeState()}`);
+  console.log(`  Working tree (start):  ${startingTree}`);
+  if (startingSourceChanges?.length) {
+    for (const change of startingSourceChanges.slice(0, 20)) console.log(`    ${change}`);
+    if (startingSourceChanges.length > 20) console.log(`    ... and ${startingSourceChanges.length - 20} more change(s)`);
+  }
+  console.log(`  Working tree (end):    ${sourceTree}`);
+  if (sourceChanges?.length) {
+    for (const change of sourceChanges.slice(0, 20)) console.log(`    ${change}`);
+    if (sourceChanges.length > 20) console.log(`    ... and ${sourceChanges.length - 20} more change(s)`);
+  }
   console.log(`  Platform / Node:       ${process.platform}/${process.arch} · ${process.version}`);
   console.log(`  Total Fixtures:        ${results.length}`);
   console.log(`  True Positives (TP):   ${pc.green(String(tp))}`);
@@ -293,8 +310,9 @@ export async function runBenchmark(): Promise<void> {
   console.log(`  Total Runtime:         ${(totalDuration / 1000).toFixed(1)}s`);
   console.log(pc.dim('─'.repeat(45)));
 
-  if (fp > 0 || fn > 0 || expectationMismatches > 0 || executionErrors > 0) {
-    console.error(pc.bold(pc.red(`\nFAILED: ${fp} false blocker(s), ${fn} missed bug(s), ${expectationMismatches} expectation mismatch(es), ${executionErrors} execution error(s).`)));
+  const sourceIntegrityFailure = mode === 'AUTHORITATIVE' && (startingTree !== 'CLEAN' || sourceTree !== 'CLEAN');
+  if (fp > 0 || fn > 0 || expectationMismatches > 0 || executionErrors > 0 || sourceIntegrityFailure) {
+    console.error(pc.bold(pc.red(`\nFAILED: ${fp} false blocker(s), ${fn} missed bug(s), ${expectationMismatches} expectation mismatch(es), ${executionErrors} execution error(s), source tree ${sourceTree}.`)));
     process.exitCode = 1;
   } else {
     console.log(pc.bold(pc.green(`\nPASSED: FP ${fp}, FN ${fn}, expectation mismatches ${expectationMismatches}, execution errors ${executionErrors}; precision ${precision}, recall ${recall}.`)));
@@ -317,16 +335,16 @@ function sourceSha(): string {
   }
 }
 
-function sourceTreeState(): 'CLEAN' | 'DIRTY' | 'UNKNOWN' {
+function sourceTreeChanges(): string[] | undefined {
   try {
     const status = execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 3000,
     });
-    return status.trim() ? 'DIRTY' : 'CLEAN';
+    return parseGitPorcelainStatus(status);
   } catch {
-    return 'UNKNOWN';
+    return undefined;
   }
 }
 

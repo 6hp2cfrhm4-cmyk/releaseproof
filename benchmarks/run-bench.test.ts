@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
-import { formatMetric, loadFixtureExpected, parseFixtureExpected, selectBenchmarkFixtures } from './run-bench.js';
+import { formatMetric, loadFixtureExpected, parseFixtureExpected, parseGitPorcelainStatus, selectBenchmarkFixtures } from './run-bench.js';
 
 describe('authoritative benchmark integrity', () => {
   it('rejects missing or invalid expectations instead of assuming READY', async () => {
@@ -38,6 +38,14 @@ describe('authoritative benchmark integrity', () => {
   it('reports N/A rather than 100 percent when a metric denominator is zero', () => {
     expect(formatMetric(0, 0)).toBe('N/A');
     expect(formatMetric(2, 4)).toBe('50.0%');
+  });
+
+  it('retains porcelain status entries for source-integrity diagnostics', () => {
+    expect(parseGitPorcelainStatus(' M benchmarks/run-bench.ts\r\n?? new-file.txt\r\n')).toEqual([
+      ' M benchmarks/run-bench.ts',
+      '?? new-file.txt',
+    ]);
+    expect(parseGitPorcelainStatus('')).toEqual([]);
   });
 
   it('rejects a fixture directory without its expectation file', async () => {

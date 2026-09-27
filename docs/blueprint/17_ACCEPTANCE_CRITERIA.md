@@ -52,7 +52,7 @@ Every P0/P1 row must have evidence on the **same final source SHA**. “Code exi
 | ID | Priority | Pass condition / evidence |
 | --- | --- | --- |
 | TEST-CORE-001, TEST-CLI-001, TEST-SEC-001, TEST-DESKTOP-001 | P0 | Full regression matrix in [12](12_TESTING_STRATEGY.md) passes with exact counts on final SHA, not only mocks. |
-| BENCH-AUTH-001, BENCH-METRIC-001 | P0 | AUTHORITATIVE clean run: FP=0, FN=0, no expectation mismatch/execution errors; correct capability/category checks; FAST labeled nonrelease. |
+| BENCH-AUTH-001, BENCH-METRIC-001 | P0 | AUTHORITATIVE clean-source run: source tree clean at start/end, FP=0, FN=0, no expectation mismatch/execution errors; changed paths exposed; correct capability/category checks; FAST labeled nonrelease. |
 | TEST-REALWORLD-001 | P1 | Ten pinned repos have dated final reruns or exact NOT VERIFIED reason; historical/refreshed SHA never conflated; no unexplained confirmed false blocker. |
 | CI-MATRIX-001, CI-DESKTOP-001 | P0 | Six OS/Node jobs, Ubuntu + Windows authoritative, Python, browser, Desktop build/E2E and installed Windows app jobs green on final SHA. |
 | ACTION-001 | P0 | Action E2E proves outputs and correct healthy/blocker/incomplete/internal exit policies, no nonexistent npm dependency. |
