@@ -32,7 +32,17 @@ function App() {
       setEventLog((items) => logsPaused ? items : [...items, next].slice(-200));
     });
   }, [logsPaused]);
-  useEffect(() => { document.documentElement.dataset.theme = settings.theme; }, [settings.theme]);
+  useEffect(() => {
+    const root = document.documentElement;
+    const systemScheme = window.matchMedia('(prefers-color-scheme: light)');
+    const applyTheme = () => {
+      root.dataset.themePreference = settings.theme;
+      root.dataset.theme = settings.theme === 'system' ? (systemScheme.matches ? 'light' : 'dark') : settings.theme;
+    };
+    applyTheme();
+    systemScheme.addEventListener('change', applyTheme);
+    return () => systemScheme.removeEventListener('change', applyTheme);
+  }, [settings.theme]);
 
   const report = event?.type === 'finished' ? event.report : undefined;
 

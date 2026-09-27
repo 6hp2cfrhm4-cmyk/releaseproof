@@ -127,6 +127,7 @@ async function verifyThroughRenderer(page, project, expectedVerdict, expectedHea
   assert.equal(await verifyButton.isEnabled(), true, 'Runnable selected target should be verifiable after trust acknowledgement.');
   await verifyButton.click();
   await page.getByRole('heading', { name: expectedHeading, exact: true }).waitFor({ timeout: timeoutMs });
+  await assertAccessibleControls(page, expectedHeading);
   const report = JSON.parse(await fs.readFile(path.join(project, '.releaseproof', 'report.json'), 'utf8'));
   assert.equal(report.verdict, expectedVerdict);
   assert.equal(report.runStatus, 'completed');
@@ -135,6 +136,50 @@ async function verifyThroughRenderer(page, project, expectedVerdict, expectedHea
   assert.ok(htmlReport.includes(`Report ${report.id}`), 'HTML report must identify the same verification run as report.json.');
   assert.ok(aiHandoff.includes(`**Report ID**: ${report.id}`), 'AI handoff must identify the same verification run as report.json.');
   return report;
+}
+
+async function assertAccessibleControls(page, screenName) {
+  const unnamed = await page.evaluate(() => [...document.querySelectorAll('button, input, select, textarea, a[href], [role="button"], [role="link"]')]
+    .filter((element) => {
+      const style = getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || element.getAttribute('aria-hidden') === 'true') return false;
+      const labelledBy = element.getAttribute('aria-labelledby')?.split(/\s+/).map((id) => document.getElementById(id)?.textContent?.trim()).filter(Boolean).join(' ');
+      const label = element.labels ? [...element.labels].map((item) => item.textContent?.trim()).filter(Boolean).join(' ') : '';
+      return !(element.getAttribute('aria-label') || labelledBy || label || element.getAttribute('title') || element.getAttribute('alt') || element.textContent?.trim());
+    })
+    .map((element) => `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}`));
+  assert.deepEqual(unnamed, [], `${screenName} contains controls without accessible names.`);
+}
+
+async function assertVisibleTextContrast(page, themeName) {
+  const failures = await page.evaluate(() => {
+    const parse = (color) => {
+      const values = color.match(/[\d.]+/g)?.map(Number) ?? [];
+      if (values.length < 3) return undefined;
+      const [r, g, b, alpha = 1] = values;
+      if (alpha === 0) return undefined;
+      return [r, g, b].map((part) => part / 255);
+    };
+    const luminance = (channels) => channels.map((part) => part <= 0.04045 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4).reduce((sum, part, index) => sum + part * [0.2126, 0.7152, 0.0722][index], 0);
+    const elements = [...document.querySelectorAll('.screen *')].filter((element) => element.children.length === 0 && element.textContent?.trim());
+    return elements.flatMap((element) => {
+      const style = getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return [];
+      const foreground = parse(style.color);
+      let ancestor = element;
+      let background;
+      while (ancestor && !background) {
+        background = parse(getComputedStyle(ancestor).backgroundColor);
+        ancestor = ancestor.parentElement;
+      }
+      if (!foreground || !background) return [];
+      const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+      const ratio = (values[0] + 0.05) / (values[1] + 0.05);
+      const large = Number.parseFloat(style.fontSize) >= 24 || (Number.parseFloat(style.fontSize) >= 18.66 && Number(style.fontWeight) >= 700);
+      return ratio < (large ? 3 : 4.5) ? [{ text: element.textContent.trim().slice(0, 60), ratio, required: large ? 3 : 4.5 }] : [];
+    });
+  });
+  assert.deepEqual(failures, [], `${themeName} visible text fails WCAG AA contrast: ${JSON.stringify(failures)}`);
 }
 
 let session;
@@ -146,6 +191,7 @@ try {
     return !['node.exe', 'node.cmd', 'pnpm.cmd', 'corepack.cmd'].some((tool) => existsSync(path.join(entry, tool)));
   }).join(path.delimiter);
   session = await launchAndAttach(userData, { ...process.env, PATH: pathWithoutNode, NODE_OPTIONS: '' });
+  await assertAccessibleControls(session.page, 'Home');
   await session.page.keyboard.press('Tab');
   const firstFocus = await session.page.evaluate(() => ({
     tag: document.activeElement?.tagName,
@@ -186,6 +232,7 @@ try {
   const copiedHandoff = execFileSync('powershell.exe', ['-NoProfile', '-Command', 'Get-Clipboard -Raw'], { encoding: 'utf8' });
   assert.match(copiedHandoff, /ReleaseProof/i, 'Copy for AI did not put the sanitized handoff on the clipboard.');
   await page.getByRole('button', { name: 'Findings' }).click();
+  await assertAccessibleControls(page, 'Findings');
   const firstFinding = page.locator('article.finding').first();
   const findingTitle = await firstFinding.locator('strong').innerText();
   await firstFinding.click();
@@ -196,12 +243,15 @@ try {
   const findingWithEvidence = page.locator('article.finding').filter({ hasText: /[1-9]\d* evidence item/ }).first();
   await findingWithEvidence.click();
   await page.getByRole('button', { name: 'Evidence', exact: true }).click();
+  await assertAccessibleControls(page, 'Evidence');
   await page.getByRole('heading', { name: 'Evidence' }).waitFor({ timeout: 5000 });
   assert.ok((await page.locator('.evidence').count()) > 0, 'Evidence view did not render report evidence.');
   await page.getByRole('button', { name: 'Logs', exact: true }).click();
+  await assertAccessibleControls(page, 'Logs');
   await page.getByRole('heading', { name: 'Logs' }).waitFor({ timeout: 5000 });
   assert.match(await page.locator('.log-box').innerText(), /finished|done|READY/i, 'Logs view did not retain the terminal run event.');
   await page.getByRole('button', { name: 'Doctor', exact: true }).click();
+  await assertAccessibleControls(page, 'System Doctor');
   await page.getByRole('heading', { name: 'System Doctor' }).waitFor({ timeout: 5000 });
   await page.getByRole('button', { name: 'Run capability checks' }).click();
   const availableDoctorNode = page.locator('.doctor-list .finding').filter({ hasText: 'Node.js' });
@@ -210,25 +260,18 @@ try {
     'System Doctor did not report the installed required runtime and version.');
   await page.getByRole('button', { name: 'Settings' }).click();
   await page.getByText('0.2.0-dev.0').waitFor({ timeout: 10000 });
+  await assertAccessibleControls(page, 'Settings');
   const themeSelect = page.locator('.setting-row select').first();
   await themeSelect.selectOption('light');
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
   await page.getByRole('button', { name: 'Doctor', exact: true }).click();
-  const lightContrast = await page.evaluate(() => {
-    const rgb = (value) => value.match(/[\d.]+/g).slice(0, 3).map(Number).map((part) => part / 255).map((part) => part <= 0.04045 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4);
-    const luminance = (value) => { const [r, g, b] = rgb(value); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-    const background = getComputedStyle(document.documentElement).backgroundColor;
-    return [...document.querySelectorAll('.screen .eyebrow, .screen .lede, .screen .metric span')].map((element) => {
-      const foreground = getComputedStyle(element).color;
-      const [light, dark] = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
-      return { text: element.textContent?.trim(), ratio: (light + 0.05) / (dark + 0.05) };
-    });
-  });
-  assert.ok(lightContrast.length > 0 && lightContrast.every((item) => item.ratio >= 4.5),
-    `Light theme text contrast below WCAG AA: ${JSON.stringify(lightContrast)}`);
+  await assertVisibleTextContrast(page, 'Light theme');
   await page.getByRole('button', { name: 'Settings' }).click();
   await themeSelect.selectOption('dark');
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+  await page.getByRole('button', { name: 'Doctor', exact: true }).click();
+  await assertVisibleTextContrast(page, 'Dark theme');
+  await page.getByRole('button', { name: 'Settings' }).click();
   await closeAttachedApp(session);
   session = undefined;
   session = await launchAndAttach(userData, process.env);
@@ -239,7 +282,14 @@ try {
   assert.equal(await page.locator('.setting-row select').first().inputValue(), 'dark', 'Theme selection was not persisted across application restart.');
   const persistedThemeSelect = page.locator('.setting-row select').first();
   await persistedThemeSelect.selectOption('system');
-  await page.waitForFunction(() => document.documentElement.dataset.theme === 'system');
+  await page.waitForFunction(() => ['light', 'dark'].includes(document.documentElement.dataset.theme)
+    && document.documentElement.dataset.themePreference === 'system');
+  let systemTheme = await page.evaluate(() => document.documentElement.dataset.theme);
+  await assertVisibleTextContrast(page, `System theme (${systemTheme})`);
+  await page.emulateMedia({ colorScheme: systemTheme === 'light' ? 'dark' : 'light' });
+  await page.waitForFunction((previousTheme) => document.documentElement.dataset.theme !== previousTheme, systemTheme);
+  systemTheme = await page.evaluate(() => document.documentElement.dataset.theme);
+  await assertVisibleTextContrast(page, `System theme changed to ${systemTheme}`);
   for (const artifact of ['report.json', 'report.html', 'RELEASEPROOF_FIX.md']) {
     await fs.access(path.join(projectPath, '.releaseproof', artifact));
   }
