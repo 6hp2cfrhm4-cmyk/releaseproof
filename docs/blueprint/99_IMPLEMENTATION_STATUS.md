@@ -3,20 +3,20 @@
 This optional ledger records the transition from the blueprint stage into Stage B. It is subordinate to [17_ACCEPTANCE_CRITERIA.md](17_ACCEPTANCE_CRITERIA.md) and [20_FINAL_CHECKLIST.md](20_FINAL_CHECKLIST.md); it must never turn code presence or a partial green run into DONE.
 
 **Snapshot:** 2026-09-27
-**Branch / HEAD:** `codex/core-hardening-before-desktop` / `29b700f8e1fb057982aee11191e4f2e51ea26455`
-**Working tree:** implementation changes are uncommitted; blueprint edits are intentionally preserved
-**Current implementation phase:** Core hardening, report contract metadata, Action policy controls and Desktop IPC/lifecycle hardening are in progress; final acceptance is still incomplete.
+**Branch / HEAD:** `codex/core-hardening-before-desktop` / `96930383efab319dcd8187ca0ff518213a6283aa`
+**Working tree:** Desktop source/E2E changes are committed; real-world and progress-ledger evidence updates remain uncommitted. No reset/rebase performed.
+**Current implementation phase:** Core/CLI gates have prior evidence; packaged verification, five-case parity, cancel and close-during-run were added and pass locally. Updated-commit remote CI, worker-crash handling and the remaining acceptance rows are still open.
 
 ## Evidence currently available
 
 | Area | Evidence | Boundary |
 | --- | --- | --- |
-| Build/typecheck | `pnpm run build` and `pnpm run lint` passed after report/IPC changes | rerun on final SHA; lint is TypeScript no-emit, not an ESLint policy |
-| Tests | fresh full run after changes: 23 files, 80 passed, 1 skipped; Desktop validation adds 3 IPC tests | no complete packaged-app E2E or CLI/Desktop parity suite |
-| Benchmark | Ubuntu CI AUTHORITATIVE on this SHA: 42 fixtures, TP13/TN29/FP0/FN0, zero mismatches/errors, 6 external cases; fresh Windows local rerun: TP11/TN28/FP1/FN2, 3 mismatches, 8 external cases, 918.5s | Windows FastAPI classification divergence is an active release blocker; do not weaken expectations or call the local gate green |
-| Remote CI | run `36272677692` completed successfully for this SHA: six OS/Node cells, Action E2E, CLI tarball E2E and Desktop installer smoke; Ubuntu Node 20 benchmark 42 fixtures, TP13/TN29/FP0/FN0, zero mismatches/errors, six external cases | no installed-app E2E, Desktop parity or full lifecycle gate in this run |
-| Windows installer | current development package built successfully: `apps/desktop/release/ReleaseProof-Setup-0.2.0-dev.0.exe`, SHA256 `ad8320f6650dd97a453596f3d396129aa49de39b6fc47af1459dd79a5d54cacb` | installed project verification, metadata/icon inspection and CI install/uninstall remain; no release was created |
-| Real-world | ten pinned Windows observations: 3 READY, 1 NOT_READY, 6 INCOMPLETE | diagnostic record; final SHA reruns required |
+| Build/typecheck/tests | Frozen install, `pnpm run build`, `pnpm run lint`, Desktop renderer typecheck and `pnpm test` passed before source commit `9693038`; 23 files, 83 passed, 1 skipped | lint is TypeScript no-emit, not an ESLint policy; remote CI must validate the committed SHA |
+| Authoritative benchmark | `pnpm run bench` with `RELEASEPROOF_BENCH_MODE=AUTHORITATIVE` on source tree committed as `9693038`: 42 fixtures, TP12/TN30/FP0/FN0, 7 external, 0 mismatches/errors, 663.7s | Windows local result; remote final-SHA benchmark still required |
+| Remote CI | <https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/runs/36281327249> passed six OS/Node cells, Action E2E, CLI tarball E2E, Windows authoritative benchmark and prior installer smoke on base SHA `6455c50` | new parity and installed-verification tests have not yet run remotely on the current worktree |
+| Windows installer / packaged E2E | `ReleaseProof-Setup-0.2.0-dev.0.exe`, 95,792,627 bytes, SHA256 `acefaf0cf180e22d9d698511625f8ad6502a7c0de86c95fd56090c1b8b742168`; local install/launch without Node/pnpm/Corepack, READY 90 fixture verification, report artifacts, CANCELLED/0, close-during-start cleanup and uninstall passed | produced from source in `9693038`; remote rebuild/hash and Start Menu/icon/about/version metadata inspection remain; unsigned development artifact only |
+| CLI/Desktop parity | Source in `9693038`: five cases READY, build/runtime/browser NOT_READY and external-dependency INCOMPLETE matched on verdict, score, check ID/status/classification and browser mode | local Windows; parity CI job added but not yet run remotely |
+| Real-world | ten exact-pinned Windows targets rerun on base SHA `6455c50`: 3 READY, 1 NOT_READY, 6 INCOMPLETE; refreshed pins kept separate from historical SHA | new final SHA rerun remains; Windows-only evidence, and hackathon-starter's cause remains unknown |
 
 ## Status definitions
 
@@ -30,12 +30,12 @@ This optional ledger records the transition from the blueprint stage into Stage 
 
 | Requirement group | Status | Next evidence |
 | --- | --- | --- |
-| `PROD-*`, `CORE-*`, `DETECT-*`, `RUNTIME-*` | IN PROGRESS | final regression matrix: foreign port, delayed crash/browser error, API semantics, target selection, Python/manager compatibility, cancellation and cleanup; Python interpreter probing now avoids pip-less MSYS false starts |
-| `CLI-*`, `REPORT-*` | IN PROGRESS | compiled CLI exits/JSON/config precedence; schema v1 metadata/capability/cleanup fields now emitted by Core; atomic JSON/HTML/AI parity and redaction remain |
-| `SEC-*` | IN PROGRESS | host-env minimization, env-file policy, chunk-safe redaction, safe HTML/Markdown and IPC path/channel rejection; Desktop validation tests now cover trust/path/settings/artifact boundaries |
-| `DESKTOP-*`, `DESIGN-A11Y-*` | IN PROGRESS | real Electron E2E, worker crash/close/cancel, full findings/evidence/log/Doctor/settings behavior, accessibility and five-case parity; bounded event log and shared AI handoff are implemented |
-| `PKG-WIN-001`, `PKG-CLI-001` | IN PROGRESS | clean installed Windows app verification, metadata/icon/uninstall, CLI tarball outside repo and checksums |
-| `TEST-*`, `BENCH-*`, `CI-*`, `ACTION-001` | IN PROGRESS | exact final-SHA counts, authoritative benchmark, six-cell CI, Action policy cases and installed-app CI; Action now exposes `target` and independent `fail-on-incomplete`, and CI schedules Windows authoritative benchmark on Node 20 |
+| `PROD-*`, `CORE-*`, `DETECT-*`, `RUNTIME-*` | IN PROGRESS | authoritative current-worktree benchmark and ten-project base-SHA corpus are recorded; final-SHA corpus, cross-platform/process cleanup evidence remain |
+| `CLI-*`, `REPORT-*` | IN PROGRESS | compiled CLI exits/JSON/config precedence and schema v1 metadata are covered; atomic JSON/HTML/AI parity and redaction remain to be independently gated |
+| `SEC-*` | IN PROGRESS | host-env minimization and IPC/path validation are tested; clean-workspace-vs-isolation and packaged report redaction need final E2E evidence |
+| `DESKTOP-*`, `DESIGN-A11Y-*` | IN PROGRESS | packaged verification, Cancel, close-during-run and five-case parity pass locally; worker-crash, full UI-flow/a11y/settings and remote CI evidence remain |
+| `PKG-WIN-001`, `PKG-CLI-001` | IN PROGRESS | local installed project verification/uninstall passes; final-SHA installer/hash, Start Menu/icon/about inspection and release-style CLI tarball checksum remain |
+| `TEST-*`, `BENCH-*`, `CI-*`, `ACTION-001` | IN PROGRESS | current-worktree authoritative benchmark and local Desktop gates pass; run updated six-cell CI, Action/tarball and Windows packaged E2E on committed SHA |
 | `RELEASE-PROV-001` | IN PROGRESS | Stage C review; preserve `v0.1.0`; new immutable release only after review |
 
 ## Rules for updating this ledger

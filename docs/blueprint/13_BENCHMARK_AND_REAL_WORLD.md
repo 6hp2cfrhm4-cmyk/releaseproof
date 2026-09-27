@@ -6,15 +6,19 @@
 
 **BENCH-METRIC-001 · P0:** TP = broken fixture correctly NOT_READY; FN = broken fixture not NOT_READY; FP = healthy/environment-limited fixture incorrectly NOT_READY; TN = healthy/environment-limited fixture not falsely blocked. This binary matrix is **insufficient alone**: every fixture must also match exact READY vs INCOMPLETE expectation, category, declared bounds and capabilities. A benchmark fails on FP>0, FN>0, any expectation mismatch or any execution error. Do not call precision/recall 100% when denominator is zero; report `N/A`. Print mode, source SHA, platform/toolchain, fixture count, TP/TN/FP/FN, mismatches, errors and external cases. Keep all failures visible rather than exiting after first one.
 
-Prior CI at `c371dea` reported 42 fixtures/TP13/TN29/FP0/FN0/external6; this does **not** certify the current `29b700f` Desktop milestone. The implementation agent reruns authoritative on the final commit, with at least Ubuntu Node 20 as required job and Windows authoritative required for the Windows-specific runtime/installer changes. FAST smoke runs across all six OS/Node cells.
+Run `36281327249` on exact source `6455c50` passed the Windows Node 20 authoritative benchmark: 42 fixtures/TP12/TN30/FP0/FN0/external7, zero mismatches/errors, 1044.0 seconds. The same source passed the local Windows run with the same counts in 652.5 seconds. The TP/TN split changed because the hanging-start fixture now expects `INCOMPLETE` when a process remains alive but never opens its port and there is no failure evidence. This synthetic result does not certify installed-app verification or Desktop/CLI parity. FAST smoke runs across all six OS/Node cells.
 
-The 2026-09-27 local Windows rerun on `29b700f` is intentionally recorded as a failed gate: 42 fixtures, TP 11, TN 28, FP 1, FN 2, three expectation mismatches, eight external cases, 918.5 seconds. `fastapi-env-error` and `fastapi-missing-dependency` were expected NOT_READY but observed INCOMPLETE; `fastapi-working` was expected READY but observed NOT_READY. Ubuntu CI passed its authoritative run, so this is a platform-specific unresolved classification/runtime issue, not permission to edit expectations. Luna must reproduce, determine whether the Windows toolchain is unavailable or the verifier is wrong, add regression coverage, and rerun both platforms.
+The earlier local Windows rerun on `29b700f` (TP11/TN28/FP1/FN2) remains a historical observation from before the hanging-start expectation correction; it is superseded as a gate by the passing `6455c50` reruns, but retained for audit history.
 
 ## Real-world corpus method
 
 **TEST-REALWORLD-001 · P1:** For each target record repo URL, exact 40-char SHA, pin type (`original`/`refreshed`), date, OS/arch, Node/Python/package-manager versions, selected target, commands/lockfile, verdict, blockers/warnings/unknowns, browser mode, limitations and link to redacted report evidence. Clone read-only; do not mutate upstream. Use clean copy and exact pinned checkout. Retry environmental network timeouts once with same SHA/config and report both attempts. Do not change an expected verdict to hide a false blocker; review evidence, classify root cause and add synthetic regression first. Historical pins remain historical and are never silently equated with refreshed HEADs.
 
-## Current working-tree corpus record (pending final rerun)
+## Current final-SHA corpus reruns — COMPLETE for the recorded ten targets
+
+`docs/REAL_WORLD_VALIDATION.md` contains the full 2026-09-27 table, exact SHAs, toolchains, selected targets and evidence limits. On `6455c50`, all ten repositories were rerun on Windows 11 build 26200 / Node 24.19.0 / Python 3.12.14 (where applicable), with compatible pinned pnpm versions for taxonomy, leerob/site, vitesse-lite and vite-plugin-inspect. Totals are 3 READY, 1 NOT_READY and 6 INCOMPLETE; no confirmed false blocker remains unexplained. The six refreshed pins are not conflated with their unavailable historical SHAs. `hackathon-starter` remains INCOMPLETE because its process stayed alive without port 8080 readiness in 60 seconds and available evidence did not determine why.
+
+## Prior working-tree corpus record (historical observation)
 
 These entries are from the uncommitted `docs/REAL_WORLD_VALIDATION.md` dated 2026-09-23, **not** a green CI corpus gate:
 

@@ -1,8 +1,30 @@
 # Real-World Open Source Repository Validation
 
-> **Revalidation date:** 2026-09-23
-> **ReleaseProof under test:** unreleased `0.2.0-dev.0` core-hardening checkout on Windows
-> **Method:** clean-room verification of ten public repositories at the exact SHAs below; no upstream changes.
+> **Revalidation date:** 2026-09-27
+> **ReleaseProof under test:** unreleased `0.2.0-dev.0`, source `6455c5028de4d82f15a8220ae7ed2b1826ce046e`
+> **Environment:** Windows 11 Home 10.0.26200 x64, Node v24.19.0, Python 3.12.14. Compatible managers were used where required by the lockfile: pnpm 8.15.9 (taxonomy), pnpm 9.15.9 (leerob/site), pnpm 10.7.1 (vite-plugin-inspect), pnpm 12.3.4 (vitesse-lite); npm for npm-lockfile projects.
+> **Method:** clean-workspace verification of ten public repositories at exact pinned SHAs; no upstream changes. Reports were inspected for target, capability, checks and evidence. These outcomes are environment-scoped, not universal claims.
+
+The six unreachable historical pins were not silently substituted. The owner's decision authorized fresh pins for those same six repositories; the original hashes and their older outcomes remain in the historical sections below. The four still-available original pins were rerun unchanged.
+
+## Final-SHA rerun — 2026-09-27
+
+| Repository | Pin | Exact SHA | Target / toolchain | Result | Evidence and limitation |
+| --- | --- | --- | --- | --- | --- |
+| [Next.js-Boilerplate](https://github.com/ixartz/Next-js-Boilerplate) | refreshed | `9df22d0980702729da01c4465b9fb8ca292d6cce` | root; Next.js, npm lockfile | **INCOMPLETE 71** | Install passed; build reported required reachable PostgreSQL at port 5432 unavailable. 0 blockers, 1 unknown, 1 warning; browser unavailable because prerequisite build did not complete. |
+| [taxonomy](https://github.com/shadcn-ui/taxonomy) | refreshed | `298a8857c7128a0d121e7f699dfd729f23b3966d` | root; Next.js, pnpm 8.15.9 for v6 lockfile | **INCOMPLETE 79** | Frozen install passed; build could not run without required project environment values. 0 blockers, 1 unknown; browser unavailable after build prerequisite. |
+| [leerob/site](https://github.com/leerob/site) | refreshed | `fd03371e3c90481a8447904e1b548e4c0327b7db` | root; Next.js, pnpm 9.15.9 | **READY 94** | Build/start/runtime and Playwright browser verification passed; 0 blockers, 2 nonblocking warnings (analytics-related). |
+| [vitesse-lite](https://github.com/antfu/vitesse-lite) | original | `0b352977755e1f7f6399698e308777760409ca71` | root; Vite, pnpm 12.3.4 | **READY 100** | Build, startup and Playwright browser verification passed; no blockers/warnings/unknowns. |
+| [vite-plugin-inspect](https://github.com/sapphi-red/vite-plugin-inspect) | original | `87be12718b1abc56c42e7024b08f41546b08951e` | root; Vite, pnpm 10.7.1 | **NOT_READY 75** | Clean install passed; build failed in upstream Node ESM loading on Windows with `ERR_UNSUPPORTED_ESM_URL_SCHEME` for a `c:` URL. One evidenced blocker; browser could not run after build failure. |
+| [node-express-realworld-example-app](https://github.com/gothinkster/node-express-realworld-example-app) | original | `30b68e1e881462b2f4164ea09ab4c4f5699c7b0b` | root; Express/API, npm lockfile | **READY 100** | Install/build/start and API route evidence passed. Browser correctly SKIPPED for API-only target. |
+| [hackathon-starter](https://github.com/sahat/hackathon-starter) | refreshed | `410fccec23f6d4b509397b408ba7745f0f469027` | root; Express, npm lockfile | **INCOMPLETE 75** | Process remained alive, but source-declared port 8080 did not become ready within 60s. Evidence cannot distinguish slow startup, external dependency or misconfiguration. 0 blockers, 1 unknown; browser skipped. |
+| [fastapi-realworld-example-app](https://github.com/nsidnev/fastapi-realworld-example-app) | original | `029eb7781c60d5f563ee8990a0cbfb79b244538c` | root; FastAPI, Poetry lock; Python 3.12.14 | **INCOMPLETE 72** | A single workspace-local interpreter was used for install/start selection; install required an unavailable native build toolchain for old `asyncpg`. 0 blockers, 1 unknown; dependent startup not attempted, browser skipped. |
+| [fastapi-microservices](https://github.com/Kludex/fastapi-microservices) | refreshed | `262bd1b7a97d6a6375067abac778bb8d75bb5edc` | root and `users/`; Python 3.12.14 | **INCOMPLETE 56 root; INCOMPLETE 80 users/** | Root has no runnable target, so no runtime proof. `users/` install identifies pinned `uvloop==0.15.2` as unsupported on Windows. Both are 0 blockers/1 unknown; browser skipped/not applicable. |
+| [todomvc](https://github.com/tastejs/todomvc) | refreshed | `ff43b02e59dfa604386bb382034b2cd07c2bcd8a` | repository root; Express dependencies, npm lockfile | **INCOMPLETE 83** | Root has no supported build/start target; README commands scoped to nested `examples/react` do not prove root runtime. 0 blockers, 1 unknown; browser skipped. |
+
+Totals across the ten repositories: **3 READY, 1 NOT_READY, 6 INCOMPLETE** (the FastAPI microservices root and `users/` are two targets within one repository). No confirmed false blocker was observed. `hackathon-starter` remains unresolved and correctly incomplete; the `vite-plugin-inspect` build failure is supported by Windows build evidence. Reports remain local under temporary checkouts and were not committed because they contain machine-specific paths/logs; the table records bounded, redacted conclusions.
+
+## Prior run — 2026-09-23 (historical; different ReleaseProof SHA)
 
 Four original v0.1.0 corpus SHAs remained fetchable. Six original SHAs returned
 `upload-pack: not our ref`; with the owner's approval, those six repositories were
@@ -10,7 +32,7 @@ re-pinned to their reachable upstream HEADs on the revalidation date. The new pi
 are different snapshots, so their results are **not** direct verdict comparisons
 with the historical v0.1.0 runs.
 
-## Revalidated corpus
+## Prior corpus observations
 
 | Repository | Pin | Exact SHA | Result | Evidence summary |
 | --- | --- | --- | --- | --- |
@@ -25,8 +47,7 @@ with the historical v0.1.0 runs.
 | [fastapi-microservices](https://github.com/Kludex/fastapi-microservices) | refreshed | `262bd1b7a97d6a6375067abac778bb8d75bb5edc` | **INCOMPLETE** (root 78; `users/` 80) | Repository root has no runnable manifest, so static checks cannot claim READY. Nested `users/` service could not install pinned `uvloop` on Windows; both targets have 0 blockers and 1 unknown. |
 | [todomvc](https://github.com/tastejs/todomvc) | refreshed | `ff43b02e59dfa604386bb382034b2cd07c2bcd8a` | **INCOMPLETE** (83; 0 blockers, 1 unknown) | Root has no build/start command, so no runtime evidence exists. README commands belong to `examples/react` after `cd`; they are no longer treated as missing root scripts. Individual examples need separate verification. |
 
-Final corpus totals: **3 READY, 1 NOT_READY, 6 INCOMPLETE**. No confirmed false blocker
-remains in these ten final runs. The upstream Windows build failure in
+Prior-run totals: **3 READY, 1 NOT_READY, 6 INCOMPLETE**. The upstream Windows build failure in
 `vite-plugin-inspect` is a verified build blocker. `hackathon-starter` remains an
 unresolved runtime cause, accurately reported as incomplete.
 

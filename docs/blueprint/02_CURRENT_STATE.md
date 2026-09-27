@@ -6,13 +6,13 @@ This is the baseline for the next implementation/review stage. It is a dated, ev
 
 | Item | Observed state |
 | --- | --- |
-| Branch / HEAD | `codex/core-hardening-before-desktop` / `29b700f8e1fb057982aee11191e4f2e51ea26455` |
-| Worktree | clean; `git status --short --branch` reports the branch tracking `origin/codex/core-hardening-before-desktop` with no local changes |
+| Branch / HEAD | `codex/core-hardening-before-desktop` / `6455c5028de4d82f15a8220ae7ed2b1826ce046e` |
+| Worktree | source changes are committed; four evidence documents and a newline-only fixture diff are uncommitted at this snapshot |
 | Remote | `origin` = `https://github.com/6hp2cfrhm4-cmyk/releaseproof.git` |
-| PR | draft PR #1, `Core hardening before desktop`, base `main`, head `29b700f`, open |
+| PR | draft PR #1, `Core hardening before desktop`, base `main`, head `6455c50`, open |
 | Tag/release | historical `v0.1.0` exists and is not to be moved or replaced |
 | Worktrees | one worktree at `C:/Users/alex/Desktop/megaproekt/RealiseProof` |
-| Recent commits | `29b700f` CI policy/FAST timeout; `ea03d8e` Desktop typecheck; `c22c0cc` verifier hardening + Desktop; `c371dea` Core hardening before Desktop |
+| Recent commits | `6455c50` hanging-start benchmark expectation; `549a679` verifier/Desktop/installer acceptance hardening; `a782af1` report/IPC/Action gates; `29b700f` CI policy/FAST timeout; `ea03d8e` Desktop typecheck |
 
 The development branch was explicitly authorized for CI push. That authorization does not authorize merge, tag movement, npm publication or a GitHub Release.
 
@@ -28,21 +28,20 @@ The development branch was explicitly authorized for CI push. That authorization
 
 ## Local evidence — VERIFIED for this checkout where stated
 
-- `pnpm run build` and `pnpm run lint` completed successfully on this checkout during this blueprint pass.
-- Prior same-checkout verification recorded `pnpm test`: 22 files, 77 passed, 1 skipped; the fresh 2026-09-27 rerun is **not green**: 22 files, 74 passed, 3 failed, 1 skipped. Failures are `critical-routes.test.ts` (missing expected `metadata.api`), one CLI flag/config E2E (fixture server did not become ready), and one browser 500 test timeout. Treat these as current P0/P1 investigation gates. A deliberately supplied unsupported Vitest reporter flag is not a test result and must not be cited as one.
-- Prior same-checkout authoritative benchmark recorded 42 fixtures, TP 13, TN 29, FP 0, FN 0, zero expectation mismatches/errors and six external-dependency cases using explicit Python 3.12.14. The fresh Windows rerun on this checkout completed with **TP 11, TN 28, FP 1, FN 2, three expectation mismatches, eight external cases** in 918.5 seconds and therefore fails the release gate. The three mismatches are `fastapi-env-error` and `fastapi-missing-dependency` (expected NOT_READY, observed INCOMPLETE) and `fastapi-working` (expected READY, observed NOT_READY). CI Ubuntu Node 20 still passed its 42-fixture gate; the platform divergence is unresolved and must not be hidden.
-- Local Windows installer smoke recorded silent install/uninstall exit 0, installed executable launch without system Node/pnpm, and SHA-256 `251c126ede279b0030e17b09567229674cbe58d0b450f952601b768b665edebe` for `ReleaseProof-Setup-0.2.0-dev.0.exe`. This does not prove icon/version metadata or project verification from the installed app.
+- Fresh 2026-09-27 rerun on `6455c50`: `pnpm run build` and `pnpm run lint` passed; `pnpm test` passed with 23 files, 83 passed, 1 skipped (84 total).
+- Local Windows authoritative benchmark on `6455c50`: 42 fixtures, TP 12, TN 30, FP 0, FN 0, zero expectation mismatches/errors, seven external-dependency cases, 652.5 seconds. Windows Node 20 hosted CI independently passed the same 42-case gate in 1044.0 seconds. The changed TP/TN split reflects the corrected expected classification of an indeterminate hanging startup, not a hidden mismatch.
+- Windows CI installed the generated Setup exe silently, launched/version-checked the installed application, and silently uninstalled it successfully. This does not prove verification of a project from the installed app, Start Menu shortcut behavior, icon rendering or upgrade behavior.
 - Several `releaseproof-*` directories remain under the user temp directory from earlier diagnostics. They are outside the repository and were deliberately not deleted during this read-only blueprint pass; final lifecycle acceptance must distinguish pre-existing residue from residue created by the final run and verify success/failure/cancel cleanup.
 
 ## Remote CI — VERIFIED status at snapshot time
 
-Run `36272677692` targets this exact SHA and completed successfully: <https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/runs/36272677692>. Desktop installer smoke, CLI tarball E2E, Action E2E and all six Windows/Ubuntu/macOS × Node 20/22 jobs passed. Ubuntu Node 20 authoritative benchmark reported 42 fixtures, TP 13, TN 29, FP 0, FN 0, zero mismatches/errors and six external cases in 345.4 seconds. Earlier run `36272111888` failed for an empty Desktop Vitest suite, expected monorepo-root exit 2 and a Windows FastAPI timeout; commits `ea03d8e` and `29b700f` address those specific failures.
+Run `36281327249` targets `6455c50` and completed successfully: <https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/runs/36281327249>. Desktop installer install/launch/uninstall smoke, CLI tarball E2E, Action E2E and all six Windows/Ubuntu/macOS × Node 20/22 jobs passed. Windows Node 20 authoritative benchmark reported 42 fixtures, TP 12, TN 30, FP 0, FN 0, zero mismatches/errors and seven external cases. FAST smoke and dogfood checks passed under the expected `INCOMPLETE` monorepo-root policy.
 
-The matrix currently includes six OS/Node cells, Action E2E, CLI tarball E2E and a Windows Desktop build/installer artifact job. Full installed-app E2E, Desktop parity, IPC/lifecycle tests and a release-candidate Windows authoritative benchmark are still target gates, not implied by the green jobs above.
+The matrix includes six OS/Node cells, Action E2E, CLI tarball E2E, Windows authoritative benchmark and Windows installer install/launch/uninstall smoke. Full installed-app project-verification E2E, Desktop parity and complete IPC/lifecycle tests remain open gates.
 
 ## Real-world corpus — VERIFIED as historical working-tree record, not final gate
 
-`docs/REAL_WORLD_VALIDATION.md` records ten dated Windows runs using exact pins: three READY, one NOT_READY and six INCOMPLETE. Four historical pins remained reachable; six were refreshed to new pinned SHAs with the user's approval. Historical and refreshed pins are explicitly separated. The record is useful diagnostic evidence, but it must be rerun or marked NOT VERIFIED on the final implementation SHA with toolchain/date/target/capability evidence. The unresolved `hackathon-starter` delayed HTTP timeout remains a limitation rather than a guessed blocker.
+`docs/REAL_WORLD_VALIDATION.md` now records the final-SHA Windows reruns for ten repositories: three READY, one NOT_READY and six INCOMPLETE. Four original pins were rerun unchanged and six repositories use refreshed pins explicitly authorized by the user; the unreachable old hashes and earlier outcomes remain historical. Environment was Windows 11 build 26200, Node 24.19.0, Python 3.12.14 with lockfile-compatible package managers. `hackathon-starter` still has an unresolved 60-second readiness timeout and is INCOMPLETE, not guessed broken.
 
 ## Known incomplete gates — EXPECTED / NOT VERIFIED
 
@@ -50,8 +49,8 @@ The matrix currently includes six OS/Node cells, Action E2E, CLI tarball E2E and
 - Worker/main lifecycle needs real tests for close, worker crash, cancellation, force cleanup, event bounds and foreign-port safety. Current `before-quit` has a bounded exit fallback; it is not proof that every child is reaped.
 - Current report schemas contain useful fields and cancellation/blocker invariants, but the independent `schemaVersion: 1.0.0` contract, migration policy, artifact hashes and full evidence/capability model still need completion.
 - Current Desktop `System Doctor`, evidence/log presentation and finding copy are functional scaffolds; target behavior in [07](07_DESKTOP_PRODUCT_SPEC.md) is broader than current code.
-- Action currently exposes `path`, `port`, `timeout` and `fail-on-blocker`; target `target`/`fail-on-incomplete` validation and healthy/blocker/incomplete/path-space E2E remain required.
-- Windows installer CI currently builds and hashes an artifact; it does not yet install, launch a project verification, inspect metadata/icon, or uninstall in CI.
+- Action exposes `path`, `target`, `port`, `timeout`, `fail-on-blocker` and `fail-on-incomplete`; healthy/blocker/incomplete policy E2E is verified in run `36281327249`.
+- Windows installer CI installs, launches/version-checks and uninstalls the packaged application. Project verification from the installed app, icon rendering and Start Menu behavior remain NOT VERIFIED.
 - The release remains development-only. Stage C review, new immutable version/tag, downloaded-artifact verification and public release are out of scope here.
 
 ## Evidence rule
