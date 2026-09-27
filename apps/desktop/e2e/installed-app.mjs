@@ -149,6 +149,9 @@ try {
   await page.getByRole('button', { name: 'Overview' }).click();
   await page.getByRole('button', { name: 'Copy for AI' }).waitFor({ timeout: 15000 });
   await page.evaluate((runId) => window.releaseproof.copyFix(runId), result.runId);
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByText('0.2.0-dev.0').waitFor({ timeout: 10000 });
+  await page.getByRole('button', { name: 'Overview' }).click();
   for (const artifact of ['report.json', 'report.html', 'RELEASEPROOF_FIX.md']) {
     await fs.access(path.join(projectPath, '.releaseproof', artifact));
   }

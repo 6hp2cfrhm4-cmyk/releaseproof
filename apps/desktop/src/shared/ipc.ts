@@ -33,6 +33,7 @@ export type WorkerEvent =
   | { type: 'error'; message: string };
 
 export interface DesktopApi {
+  getAppVersion(): Promise<string>;
   chooseProject(): Promise<string | undefined>;
   previewProject(projectPath: string): Promise<DetectionPreview>;
   startVerification(input: { projectPath: string; target?: string; trusted: boolean; timeoutMs?: number }): Promise<string>;

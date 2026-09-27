@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopApi, DesktopSettings, RunEvent } from '../shared/ipc.js';
 
 const api: DesktopApi = {
+  getAppVersion: () => ipcRenderer.invoke('app:version'),
   chooseProject: () => ipcRenderer.invoke('project:choose'),
   previewProject: (projectPath) => ipcRenderer.invoke('project:preview', projectPath),
   startVerification: (input) => ipcRenderer.invoke('run:start', input),

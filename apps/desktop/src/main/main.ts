@@ -58,6 +58,7 @@ async function createWindow(): Promise<void> {
 }
 
 function registerIpc(): void {
+  ipcMain.handle('app:version', () => app.getVersion());
   ipcMain.handle('project:choose', async () => {
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory', 'createDirectory'] });
     return result.canceled ? undefined : result.filePaths[0];

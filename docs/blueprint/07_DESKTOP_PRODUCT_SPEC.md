@@ -32,7 +32,7 @@ One window with a narrow left rail: **Project** (Home/chooser and current run), 
 
 **DESKTOP-DOCTOR-001 · P0:** System Check runs same capability probe as CLI Doctor for selected target: bundled Desktop runtime, project Node/version, manager/Corepack, Python/venv, Chromium, native build capability when detectable, disk/temp permissions, network indication. Mark required/optional/not applicable separately; remediation is concrete (“Node.js could not be found — install Node 20/22 to verify this project”), not `spawn ENOENT`. Recheck button; no false “all good” when required capability absent. Desktop launching itself must not require system Node/pnpm.
 
-**DESKTOP-SETTINGS-001 · P1:** Theme `System | Dark | Light` with immediate preview and persisted choice. Show clean-workspace default, default timeout, browser availability and report location; advanced config opens the project config file rather than duplicating complex editor logic. Recent-project clear/remove controls. Local persistence includes only recent paths, theme and nonsecret settings. Never save credentials, env values or copied AI text. Explain `.env` opt-in and trust model.
+**DESKTOP-SETTINGS-001 · P1:** Theme `System | Dark | Light` with immediate preview and persisted choice. Show the running application version from `app.getVersion()` through the narrow typed IPC bridge, plus clean-workspace default and default timeout; advanced config opens the project config file rather than duplicating complex editor logic. Recent-project clear/remove controls. Local persistence includes only recent paths, theme and nonsecret settings. Never save credentials, env values or copied AI text. Explain `.env` opt-in and trust model.
 
 ## Error taxonomy and accessibility
 

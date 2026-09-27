@@ -15,6 +15,7 @@ function App() {
   const [event, setEvent] = useState<RunEvent>();
   const [eventLog, setEventLog] = useState<RunEvent[]>([]);
   const [settings, setSettings] = useState<DesktopSettings>({ theme: 'system', defaultTimeoutMs: 30000, cleanWorkspace: true });
+  const [appVersion, setAppVersion] = useState('');
   const [recent, setRecent] = useState<string[]>([]);
   const [error, setError] = useState<string>();
   const [doctorCapabilities, setDoctorCapabilities] = useState<DoctorCapability[]>();
@@ -22,6 +23,7 @@ function App() {
   const [logsPaused, setLogsPaused] = useState(false);
 
   useEffect(() => {
+    void window.releaseproof.getAppVersion().then(setAppVersion).catch((e) => setError(userError(e)));
     void window.releaseproof.getSettings().then(setSettings).catch((e) => setError(String(e)));
     void window.releaseproof.listRecent().then(setRecent).catch(() => {});
     return window.releaseproof.subscribeRun((next) => {
@@ -70,7 +72,7 @@ function App() {
       {view === 'evidence' && <Evidence report={report} selectedFindingId={selectedFindingId} />}
       {view === 'logs' && <Logs events={eventLog} paused={logsPaused} setPaused={setLogsPaused} clear={() => setEventLog([])} />}
       {view === 'doctor' && <Doctor projectPath={projectPath} preview={preview} capabilities={doctorCapabilities} run={async () => { if (!projectPath) return; try { setDoctorCapabilities((await window.releaseproof.runDoctor(projectPath)).capabilities); } catch (e) { setError(userError(e)); } }} />}
-      {view === 'settings' && <Settings settings={settings} update={async (patch) => setSettings(await window.releaseproof.updateSettings(patch))} />}
+      {view === 'settings' && <Settings settings={settings} version={appVersion} update={async (patch) => setSettings(await window.releaseproof.updateSettings(patch))} />}
     </main>
   </div>;
 }
@@ -89,7 +91,7 @@ function Logs({ events, paused, setPaused, clear }: { events: RunEvent[]; paused
   return `[started] ${item.runId}`;
 }).join('\n')}</div></section>; }
 function Doctor({ projectPath, preview, capabilities, run }: { projectPath?: string; preview?: DetectionPreview; capabilities?: DoctorCapability[]; run: () => Promise<void> }) { return <section className="screen"><div className="eyebrow">SYSTEM CHECK</div><h2>System Doctor</h2>{!projectPath || !preview ? <p className="lede">Choose a project first to inspect its detected runtime requirements.</p> : <><p className="lede">Target: <code>{projectPath}</code></p><div className="summary-grid"><Metric label="Node" value={preview.profile.languages.some((item) => item === 'javascript' || item === 'typescript') ? 'Required' : 'Not required'} /><Metric label="Python" value={preview.profile.languages.includes('python') ? 'Required' : 'Not required'} /><Metric label="Browser" value={preview.profile.capabilities.browser ? 'Playwright capable' : 'HTTP/API checks'} /></div><button className="primary-button" onClick={() => void run()}>Run capability checks</button>{capabilities && <div className="doctor-list">{capabilities.map((capability) => <div className="finding" key={capability.id}><div className="finding-status">{capability.available ? 'AVAILABLE' : capability.required ? 'MISSING' : 'OPTIONAL'}</div><div><strong>{capability.label}</strong><p>{capability.version ?? 'Not detected'}</p>{!capability.available && capability.remediation && <small>{capability.remediation}</small>}</div></div>)}</div>}<p className="muted">A missing tool is a capability limitation, not proof that the checked project is broken.</p></>}</section>; }
-function Settings({ settings, update }: { settings: DesktopSettings; update: (patch: Partial<DesktopSettings>) => Promise<void> }) { return <section className="screen"><div className="eyebrow">PREFERENCES</div><h2>Settings</h2><label className="setting-row">Theme<select value={settings.theme} onChange={(e) => void update({ theme: e.target.value as DesktopSettings['theme'] })}><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label><label className="setting-row">Default startup timeout (ms)<input type="number" min="1000" max="600000" value={settings.defaultTimeoutMs} onChange={(e) => void update({ defaultTimeoutMs: Number(e.target.value) })} /></label><label className="setting-row"><input type="checkbox" checked={settings.cleanWorkspace} onChange={(e) => void update({ cleanWorkspace: e.target.checked })} /> Use a disposable clean workspace</label></section>; }
+function Settings({ settings, version, update }: { settings: DesktopSettings; version: string; update: (patch: Partial<DesktopSettings>) => Promise<void> }) { return <section className="screen"><div className="eyebrow">PREFERENCES</div><h2>Settings</h2><div className="setting-row"><span>ReleaseProof version</span><strong>{version || 'Loading…'}</strong></div><label className="setting-row">Theme<select value={settings.theme} onChange={(e) => void update({ theme: e.target.value as DesktopSettings['theme'] })}><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label><label className="setting-row">Default startup timeout (ms)<input type="number" min="1000" max="600000" value={settings.defaultTimeoutMs} onChange={(e) => void update({ defaultTimeoutMs: Number(e.target.value) })} /></label><label className="setting-row"><input type="checkbox" checked={settings.cleanWorkspace} onChange={(e) => void update({ cleanWorkspace: e.target.checked })} /> Use a disposable clean workspace</label></section>; }
 function Metric({ label, value }: { label: string; value: string }) { return <div className="metric"><span>{label}</span><strong>{value}</strong></div>; }
 function label(item: View): string { return item === 'home' ? 'Home / Project' : item[0].toUpperCase() + item.slice(1); }
 function userError(error: unknown): string { return error instanceof Error ? error.message : String(error); }

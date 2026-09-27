@@ -206,6 +206,14 @@ jobs:
           if (-not (Test-Path -LiteralPath $app)) { throw 'Installed application executable is missing.' }
           $version = (Get-Item -LiteralPath $app).VersionInfo.FileVersion
           if (-not $version -or $version -notmatch '^0\.2\.0-dev\.0') { throw "Unexpected installed app version: $version" }
+          $metadata = (Get-Item -LiteralPath $app).VersionInfo
+          if ($metadata.ProductName -notmatch 'ReleaseProof' -or [string]::IsNullOrWhiteSpace($metadata.FileDescription)) { throw 'Installed executable product metadata is incorrect.' }
+          $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($app)
+          if (-not $icon -or $icon.Handle -eq [IntPtr]::Zero) { throw 'Installed executable has no readable product icon.' }
+          $shortcutPath = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\ReleaseProof.lnk'
+          if (-not (Test-Path -LiteralPath $shortcutPath)) { throw 'ReleaseProof Start Menu shortcut is missing.' }
+          $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
+          if ((Resolve-Path -LiteralPath $shortcut.TargetPath).Path -ne (Resolve-Path -LiteralPath $app).Path) { throw 'Start Menu shortcut does not target the installed executable.' }
           $env:RELEASEPROOF_APP_PATH = $app
           $env:RELEASEPROOF_E2E_PROJECT = Join-Path $PWD 'fixtures/express-working'
           pnpm --filter @releaseproof/desktop exec node ./e2e/installed-app.mjs
