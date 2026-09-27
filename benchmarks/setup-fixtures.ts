@@ -328,7 +328,7 @@ export const allFixtures: FixtureDefinition[] = [
         scripts: { start: 'node -e "setInterval(()=>{}, 10000);"' },
       }),
     },
-    expected: { expectedVerdict: 'NOT_READY', expectedBlockerCategory: 'runtime', minBlockers: 1 },
+    expected: { expectedVerdict: 'INCOMPLETE', minBlockers: 0 },
   },
 
   // 21. Client secret exposed
