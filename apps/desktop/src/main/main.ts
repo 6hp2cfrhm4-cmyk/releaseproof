@@ -4,12 +4,14 @@ import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fork, ChildProcess, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { detectProject } from '@releaseproof/detector';
 import { VerificationReportSchema } from '@releaseproof/schemas';
 import { generateAiHandoffMarkdown, generateFindingHandoffMarkdown } from '@releaseproof/reporter';
 import type { DesktopSettings, DetectionPreview, RunEvent } from '../shared/ipc.js';
 import { assertAbsoluteProjectPath, validateArtifactKind, validateRunInput, validateSettingsPatch } from './validation.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultSettings: DesktopSettings = { theme: 'system', defaultTimeoutMs: 30000, cleanWorkspace: true };
 const execFileAsync = promisify(execFile);
 const runs = new Map<string, { projectPath: string; report?: ReturnType<typeof VerificationReportSchema.parse>; worker?: ChildProcess; cancelling?: boolean; terminal?: boolean }>();
@@ -42,7 +44,7 @@ async function createWindow(): Promise<void> {
     minHeight: 600,
     backgroundColor: '#111318',
     webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
+      preload: path.join(__dirname, '../preload/index.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,

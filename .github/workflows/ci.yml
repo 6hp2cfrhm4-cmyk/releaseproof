@@ -178,7 +178,11 @@ jobs:
         with:
           version: 9
       - run: pnpm install --frozen-lockfile
+      - name: Install Chromium for Desktop parity verification
+        run: pnpm --filter @releaseproof/browser exec playwright install chromium
       - run: pnpm run build
+      - name: Compare CLI and Desktop worker reports
+        run: pnpm --filter @releaseproof/desktop exec node ./e2e/parity.mjs
       - name: Typecheck Desktop renderer
         run: pnpm --filter @releaseproof/desktop exec tsc -p tsconfig.json --noEmit
       - name: Build NSIS installer
@@ -202,10 +206,10 @@ jobs:
           if (-not (Test-Path -LiteralPath $app)) { throw 'Installed application executable is missing.' }
           $version = (Get-Item -LiteralPath $app).VersionInfo.FileVersion
           if (-not $version -or $version -notmatch '^0\.2\.0-dev\.0') { throw "Unexpected installed app version: $version" }
-          $process = Start-Process -FilePath $app -PassThru -WindowStyle Hidden
-          Start-Sleep -Seconds 8
-          if ($process.HasExited) { throw "Installed application exited during launch smoke with code $($process.ExitCode)." }
-          Stop-Process -Id $process.Id -Force
+          $env:RELEASEPROOF_APP_PATH = $app
+          $env:RELEASEPROOF_E2E_PROJECT = Join-Path $PWD 'fixtures/express-working'
+          pnpm --filter @releaseproof/desktop exec node ./e2e/installed-app.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Installed application E2E failed with exit code $LASTEXITCODE." }
           $uninstaller = Get-ChildItem -LiteralPath $installDir -Filter '*uninstall*.exe' | Select-Object -First 1
           if (-not $uninstaller) { throw 'Installed uninstaller is missing.' }
           Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -Wait -WindowStyle Hidden

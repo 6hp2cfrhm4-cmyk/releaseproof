@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "outDir": "dist", "rootDir": "src", "noEmit": false },
-  "include": ["src/main/**/*.ts", "src/preload/**/*.ts", "src/worker/**/*.ts"]
+  "include": ["src/main/**/*.ts", "src/preload/**/*.cts", "src/worker/**/*.ts"]
 }
