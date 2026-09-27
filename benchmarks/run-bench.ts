@@ -328,8 +328,10 @@ async function runBenchmarkAtRoot(fixturesRoot: string): Promise<void> {
 }
 
 function sourceSha(): string {
-  const configured = process.env.GITHUB_SHA ?? process.env.GITHUB_COMMIT;
-  if (configured && /^[a-f0-9]{40,64}$/i.test(configured)) return configured;
+  // GitHub's GITHUB_SHA for pull_request workflows identifies the synthetic
+  // merge ref even when checkout is explicitly pinned to the submitted head.
+  // Report the source actually tested; use CI metadata only outside a Git
+  // checkout (for example, a packaged benchmark invocation).
   try {
     const current = execFileSync('git', ['rev-parse', '--verify', 'HEAD'], {
       encoding: 'utf8',
@@ -338,7 +340,8 @@ function sourceSha(): string {
     }).trim();
     return /^[a-f0-9]{40,64}$/i.test(current) ? current : 'unavailable';
   } catch {
-    return 'unavailable';
+    const configured = process.env.GITHUB_SHA ?? process.env.GITHUB_COMMIT;
+    return configured && /^[a-f0-9]{40,64}$/i.test(configured) ? configured : 'unavailable';
   }
 }
 
