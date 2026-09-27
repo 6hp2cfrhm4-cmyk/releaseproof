@@ -27,6 +27,7 @@ function App() {
     void window.releaseproof.getSettings().then(setSettings).catch((e) => setError(String(e)));
     void window.releaseproof.listRecent().then(setRecent).catch(() => {});
     return window.releaseproof.subscribeRun((next) => {
+      if (next.type === 'started') setRunId(next.runId);
       setEvent(next);
       setEventLog((items) => logsPaused ? items : [...items, next].slice(-200));
     });

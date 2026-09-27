@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
@@ -148,7 +148,18 @@ try {
   assert.equal(result.report.verdict, 'READY', JSON.stringify(result.report.checks.filter((check) => check.status === 'block' || check.status === 'unknown')));
   await page.getByRole('button', { name: 'Overview' }).click();
   await page.getByRole('button', { name: 'Copy for AI' }).waitFor({ timeout: 15000 });
-  await page.evaluate((runId) => window.releaseproof.copyFix(runId), result.runId);
+  await page.getByRole('button', { name: 'Copy for AI' }).click();
+  await page.getByText('Copied sanitized handoff to clipboard.').waitFor({ timeout: 5000 });
+  const copiedHandoff = execFileSync('powershell.exe', ['-NoProfile', '-Command', 'Get-Clipboard -Raw'], { encoding: 'utf8' });
+  assert.match(copiedHandoff, /ReleaseProof/i, 'Copy for AI did not put the sanitized handoff on the clipboard.');
+  await page.getByRole('button', { name: 'Findings' }).click();
+  const firstFinding = page.locator('article.finding').first();
+  const findingTitle = await firstFinding.locator('strong').innerText();
+  await firstFinding.click();
+  await page.getByRole('button', { name: 'Copy Fix Prompt' }).click();
+  await page.getByText('Copied sanitized handoff to clipboard.').waitFor({ timeout: 5000 });
+  const copiedFinding = execFileSync('powershell.exe', ['-NoProfile', '-Command', 'Get-Clipboard -Raw'], { encoding: 'utf8' });
+  assert.ok(copiedFinding.includes(findingTitle), 'Finding-specific AI handoff omitted the selected finding.');
   await page.getByRole('button', { name: 'Settings' }).click();
   await page.getByText('0.2.0-dev.0').waitFor({ timeout: 10000 });
   await page.getByRole('button', { name: 'Overview' }).click();
