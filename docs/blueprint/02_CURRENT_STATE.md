@@ -6,23 +6,23 @@ This is an evidence-labelled snapshot for the implementation/review stage. Re-ru
 
 | Item | Observed state |
 | --- | --- |
-| Branch / HEAD | `codex/core-hardening-before-desktop` / `5a8cee6025f1d0db5f81b0e9be922d68c2e5bdb0` |
-| Worktree at initial inspection | One existing uncommitted change: `apps/desktop/e2e/installed-app.mjs`; implementation work subsequently added benchmark integrity changes, tests, and updated this evidence ledger. See the latest checkpoint below for the current dirty set. |
-| Remote branch | `origin/codex/core-hardening-before-desktop` points to the same `5a8cee6025f1d0db5f81b0e9be922d68c2e5bdb0` at inspection. |
-| PR | Draft PR #1, “Core hardening before desktop”, base `main`, open; head SHA matches current HEAD. |
+| Branch / HEAD | `codex/core-hardening-before-desktop` / `caedb07980edd365253313f1d6c9775b4ab3f6d6` |
+| Worktree at latest validation | The exact-SHA benchmark ran clean. A subsequent report-hardening change is currently uncommitted in `packages/reporter/src/ai-handoff.ts` and its tests; see below. |
+| Remote branch | `origin/codex/core-hardening-before-desktop` points to `caedb07980edd365253313f1d6c9775b4ab3f6d6`. |
+| PR | Draft PR #1, “Core hardening before desktop”, base `main`, open; head SHA matches `caedb079`. |
 | Historical tag | `v0.1.0` resolves to `d03eae2e2b828d551d897669f0e4f4925b64ab14` in this checkout. It is immutable; do not move, replace, or overwrite its release assets. |
 | Worktrees | One worktree: `C:/Users/alex/Desktop/megaproekt/RealiseProof`. |
-| Recent commits | `5a8cee6` records verified implementation gates; preceding commits add Desktop doctor/accessibility/worker-crash coverage, report/IPC/Action gates, and Core/Desktop acceptance hardening. Run `git log --oneline -15` for the authoritative list. |
+| Recent commits | `caedb07` hardens benchmark integrity and packaged UI coverage; `5a8cee6` records prior verified gates. Run `git log --oneline -15` for the authoritative list. |
 
 The owner previously authorized pushing this development branch for CI. That does not authorize merge, tag movement, npm publication, or a GitHub Release. This blueprint pass performs none of those actions.
 
 ## Latest local implementation checkpoint — VERIFIED on dirty working tree
 
-After the initial snapshot, the packaged E2E extension and benchmark validation were exercised locally. `pnpm test` passed 25 files (90 passed, 1 skipped); `pnpm run build`, `pnpm run lint`, benchmark-package TypeScript check, and E2E syntax check passed. The full AUTHORITATIVE benchmark passed 42 fixtures (TP 12 / TN 30 / FP 0 / FN 0; 0 expectation mismatches; 0 execution errors; 7 external cases; 794.0 seconds) on Windows 11 / Node 24.19.0. The output explicitly reported source commit `5a8cee6025f1d0db5f81b0e9be922d68c2e5bdb0` and `Working tree: DIRTY`.
+On exact source commit `caedb07980edd365253313f1d6c9775b4ab3f6d6`, `pnpm test` passed 25 files (90 passed, 1 skipped); `pnpm run build`, `pnpm run lint`, benchmark-package TypeScript check, and E2E syntax check passed. The full AUTHORITATIVE benchmark passed 42 fixtures (TP 12 / TN 30 / FP 0 / FN 0; 0 expectation mismatches; 0 execution errors; 7 external cases; 913.2 seconds) on Windows 11 / Node 24.19.0. The output recorded this exact source commit and `Working tree: CLEAN`.
 
 The Windows NSIS installer was rebuilt locally as `ReleaseProof-Setup-0.2.0-dev.0.exe`, installed into a unique temporary directory, launched without Node/pnpm/Corepack on PATH, and ran the installed-app E2E successfully, then uninstalled cleanly. The local installer SHA-256 was `65997e2c48743f1de88323713609f227201bff510fbe837c8fb3c1ea125bf1f3`. The revised E2E requires the normal trust acknowledgement and asserts READY, NOT_READY, and INCOMPLETE UI outcomes. This is local dirty-tree evidence, not CI evidence.
 
-The current diff also hardens benchmark expectations/selections/metrics and adds five tests. Its source provenance distinguishes the git commit from clean/dirty working-tree state; no claim that the dirty benchmark equals the committed source is intended. Exact-SHA CI on the eventual commit remains required.
+The exact-SHA GitHub Actions run [36301498915](https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/runs/36301498915) passed all nine jobs on `caedb079`, including six OS/Node cells, Composite Action, CLI tarball and Windows packaged Desktop E2E. A subsequent uncommitted report-hardening change adds defensive AI-handoff fencing and one adversarial regression test; local reporter/security tests, build, lint/typecheck and the 25-file full test suite (91 passed, 1 skipped) pass for that dirty tree. Exact-SHA CI for this latter change is pending.
 
 ## Repository architecture — VERIFIED by current files
 
@@ -52,7 +52,7 @@ The committed installer script exercises the healthy READY project through the i
 ## Known incomplete gates — NOT VERIFIED unless evidence is added on the final SHA
 
 - The packaged E2E extension has passed locally but has not been exercised by CI. After it is committed, run the exact-SHA Windows installer job and require all three verdicts plus trust-gate behavior through the real renderer.
-- Re-run build, typecheck, full tests and the full authoritative benchmark on the final source SHA. Local dirty-tree evidence and green CI at its parent commit do not cover the eventual commit.
+- Re-run exact-SHA CI after the uncommitted AI-handoff safety change is committed. The current authoritative benchmark and CI are on `caedb079`; the security fix changes report generation and requires new CI evidence.
 - Complete the P0/P1 schema, report atomicity/consistency, environment propagation, secret redaction, filesystem/path/trust and owned-process cleanup checks in [17](17_ACCEPTANCE_CRITERIA.md).
 - Complete broad keyboard/screen-reader/contrast/reduced-motion and narrow-window accessibility review; sampled checks are not a full audit.
 - The current branch is development-only. Stage C independent review must precede merge/release; do not publish a new release during implementation.
