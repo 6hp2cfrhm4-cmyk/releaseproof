@@ -6,7 +6,7 @@ This ledger tracks Stage B against [17_ACCEPTANCE_CRITERIA.md](17_ACCEPTANCE_CRI
 
 **Branch:** `codex/core-hardening-before-desktop`
 
-**Current revision:** worker-exit regression follow-up based on `f344a81`; commit is local and awaits CI.
+**Current revision:** `43194abb0d7847899e3965514e6e4646f2166157` (`test(desktop): cover unexpected verification worker exit`).
 
 **Current worktree:** worker-exit supervisor/test and ledger are committed locally; frozen install not changed.
 
@@ -20,13 +20,13 @@ This ledger tracks Stage B against [17_ACCEPTANCE_CRITERIA.md](17_ACCEPTANCE_CRI
 
 | Gate | Evidence | Status / boundary |
 | --- | --- | --- |
-| Workspace build, typecheck/lint, tests | Local current worktree: `pnpm test` — 24 files, 85 passed, 1 skipped; `pnpm run lint`; `pnpm run build` all passed after worker-exit test addition | VERIFIED locally; current source edits are not yet committed/CI-tested |
-| Desktop worker crash | `apps/desktop/src/main/worker-exit.test.ts`: real Node child exits with code 23; one terminal error, no `finished`; cancellation exit also covered | VERIFIED locally; final-SHA CI pending |
-| Desktop packaged flow | Run `36287772456` on `f344a81`: Windows NSIS installer built and hashed; installed app launched without Node/pnpm/Corepack, verified fixture via worker/Core, copied full/finding handoff, cancelled run, closed during run, and uninstalled | VERIFIED on `f344a81`; URL above |
-| CLI/Desktop parity | Run `36287772456`: five-case worker/Core parity completed successfully on Linux and Windows desktop job | VERIFIED on `f344a81`; same CI run |
-| GitHub Action / CLI tarball | Run `36287772456`: Composite Action E2E and bundled CLI tarball E2E passed | VERIFIED on `f344a81`; same CI run |
-| Cross-platform matrix | Run `36287772456`: Windows Node 22, Ubuntu Node 20/22, macOS Node 20/22 passed; Windows Node 20 authoritative benchmark still running at snapshot | IN PROGRESS; wait for run conclusion |
-| Authoritative benchmark | Prior clean run: 42 fixtures, TP 12 / TN 30 / FP 0 / FN 0, 7 external, 0 mismatches/errors, 663.7s. Current CI run `36287772456` has Windows Node 20 authoritative benchmark in progress | Prior evidence VERIFIED on earlier source; current-run gate NOT YET VERIFIED |
+| Workspace build, typecheck/lint, tests | CI [`36288832814`](https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/runs/36288832814) on `43194ab`: 24 files, 85 passed, 1 skipped; build/typecheck/lint passed | VERIFIED on current revision |
+| Desktop worker crash | `apps/desktop/src/main/worker-exit.test.ts`: real Node child exits with code 23; one terminal error, no `finished`; cancellation exit also covered; CI run `36288832814` passed | VERIFIED on current revision |
+| Desktop packaged flow | Run `36288832814` on `43194ab`: Windows NSIS installer built and hashed; installed app launched without Node/pnpm/Corepack, verified fixture via worker/Core, copied full/finding handoff, cancelled run, closed during run, and uninstalled | VERIFIED on current revision |
+| CLI/Desktop parity | Run `36288832814`: five-case worker/Core parity completed successfully on Windows desktop job | VERIFIED on current revision |
+| GitHub Action / CLI tarball | Run `36288832814`: Composite Action E2E and bundled CLI tarball E2E passed | VERIFIED on current revision |
+| Cross-platform matrix | Run `36288832814`: Windows/Ubuntu/macOS × Node 20/22 all passed | VERIFIED on current revision |
+| Authoritative benchmark | Run `36288832814`: 42 fixtures, TP 12 / TN 30 / FP 0 / FN 0, 7 external, zero mismatch/error, precision/recall 100% | VERIFIED on current revision |
 | Real-world corpus | Ten exact target pins recorded in [`docs/REAL_WORLD_VALIDATION.md`](../REAL_WORLD_VALIDATION.md): 3 READY, 1 NOT_READY, 6 INCOMPLETE; refreshed pins remain separate from historical SHAs | Last executed with ReleaseProof `6455c50`; no Core/detector/runner changes exist from `6455c50` through `f344a81`, but an exact final-SHA rerun is NOT VERIFIED |
 | Desktop accessibility/full UI coverage | Packaged verification, result, handoff, settings version, cancel and close flows exercised; full keyboard/focus/contrast/theme/Doctor and worker-crash packaged flow are not covered end-to-end | NOT VERIFIED |
 | Release safety | `v0.1.0` tag SHA checked; no merge, new release, or npm publish performed | VERIFIED; keep unchanged |
@@ -35,13 +35,13 @@ This ledger tracks Stage B against [17_ACCEPTANCE_CRITERIA.md](17_ACCEPTANCE_CRI
 
 | Requirement group | Status | Remaining evidence / note |
 | --- | --- | --- |
-| `PROD-*`, `CORE-*`, `DETECT-*`, `RUNTIME-*` | IN PROGRESS | Core regression suite and 42-fixture benchmark pass; current-SHA benchmark still running; preserve external capability as INCOMPLETE where justified |
+| `PROD-*`, `CORE-*`, `DETECT-*`, `RUNTIME-*` | IN PROGRESS | Core regression suite and 42-fixture benchmark pass; final-SHA real-world rerun and full acceptance review remain |
 | `CLI-*`, `REPORT-*`, `ACTION-001` | IN PROGRESS | Binary, exit/config tests, reports and Action/tarball E2E pass; full atomic-artifact/schema/redaction contract still needs final consolidated evidence |
 | `SEC-*` | IN PROGRESS | Minimal environment, redaction and Electron boundaries have regression tests; packaged report/redaction and complete path/trust audit remain |
-| `DESKTOP-PARITY-001`, `DESKTOP-IPC-001`, `DESKTOP-SELECT-001`, `DESKTOP-VERIFY-001`, `DESKTOP-PROGRESS-001`, `DESKTOP-RESULT-001`, `DESKTOP-LIFE-001`, `DESKTOP-WORKER-001` | IN PROGRESS | Five-case parity, actual install/verify, cancel and close pass on `f344a81`; worker-crash unit/process test passes locally but needs CI on committed SHA |
+| `DESKTOP-PARITY-001`, `DESKTOP-IPC-001`, `DESKTOP-SELECT-001`, `DESKTOP-VERIFY-001`, `DESKTOP-PROGRESS-001`, `DESKTOP-RESULT-001`, `DESKTOP-LIFE-001`, `DESKTOP-WORKER-001` | IN PROGRESS | Five-case parity, actual install/verify, cancel, close and worker-crash regression pass on `43194ab`; full accessibility/UI matrix remains |
 | `DESKTOP-FINDING-*`, `DESKTOP-EVIDENCE-*`, `DESKTOP-LOGS-*`, `DESKTOP-DOCTOR-*`, `DESKTOP-SETTINGS-*`, `DESIGN-A11Y-*` | IN PROGRESS | GUI exists and core handoff flows pass; full navigation, focus, accessibility and theme persistence matrix not verified |
-| `PKG-WIN-001`, `PKG-CLI-001` | IN PROGRESS | Windows installed-app E2E and tarball E2E pass on `f344a81`; record final-SHA installer/tarball checksums after final CI |
-| `TEST-*`, `BENCH-*`, `CI-*` | IN PROGRESS | Current full CI run pending one Windows Node 20 benchmark/dogfood job; new worker-crash test needs a rerun after commit |
+| `PKG-WIN-001`, `PKG-CLI-001` | IN PROGRESS | Windows installed-app E2E and tarball E2E pass on `43194ab`; release-style artifact provenance remains pre-release work |
+| `TEST-*`, `BENCH-*`, `CI-*` | IN PROGRESS | Required CI and authoritative benchmark pass on `43194ab`; full accessibility and final corpus evidence remain |
 | `TEST-REALWORLD-001` | IN PROGRESS | Ten cases documented; exact final-SHA rerun is open. Core code is unchanged since the corpus run; historical pins remain immutable records |
 | `RELEASE-PROV-001` | IN PROGRESS | `v0.1.0` is unchanged; Stage C review must occur before any merge or release |
 
