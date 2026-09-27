@@ -4,6 +4,7 @@ import * as http from 'node:http';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawn } from 'node:child_process';
+import { assertReportArtifactSet } from '@releaseproof/reporter';
 
 const cliPath = path.resolve(process.cwd(), 'apps/cli/dist/index.js');
 
@@ -44,6 +45,7 @@ http.createServer((req, res) => {
     const diskReport = JSON.parse(await fs.readFile(path.join(artifactDir, 'report.json'), 'utf8'));
     const htmlReport = await fs.readFile(path.join(artifactDir, 'report.html'), 'utf8');
     const aiHandoff = await fs.readFile(path.join(artifactDir, 'RELEASEPROOF_FIX.md'), 'utf8');
+    await expect(assertReportArtifactSet(artifactDir, report.id)).resolves.toMatchObject({ id: report.id, verdict: report.verdict });
     expect(diskReport.id).toBe(report.id);
     expect(htmlReport).toContain(`Report ${report.id}`);
     expect(aiHandoff).toContain(`**Report ID**: ${report.id}`);
@@ -51,6 +53,12 @@ http.createServer((req, res) => {
     const processEvidence = report.checks.find((check: any) => check.id === 'startup-check').evidence.find((item: any) => item.type === 'process');
     expect(processEvidence.port).toBe(cliPort);
     expect(report.checks.find((check: any) => check.id === 'startup-check').summary).toContain('100ms');
+    const validReportCommand = await runCli(['report', root, '--no-open']);
+    expect(validReportCommand.code, JSON.stringify(validReportCommand)).toBe(0);
+    await fs.appendFile(path.join(artifactDir, 'report.html'), '<!-- unexpected stale data -->');
+    const tamperedReportCommand = await runCli(['report', root, '--no-open']);
+    expect(tamperedReportCommand.code).toBe(1);
+    expect(tamperedReportCommand.stderr).toContain('No ReleaseProof report found.');
 
     const repeated = await runCli(['verify', root, '--port', String(cliPort), '--timeout', '8000', '--json', '--skip-sandbox']);
     expect(repeated.code, JSON.stringify(repeated)).toBe(0);
@@ -58,6 +66,7 @@ http.createServer((req, res) => {
     expect(repeatedReport.id).not.toBe(report.id);
     const repeatedDiskReport = JSON.parse(await fs.readFile(path.join(artifactDir, 'report.json'), 'utf8'));
     expect(repeatedDiskReport.id).toBe(repeatedReport.id);
+    await expect(assertReportArtifactSet(artifactDir, repeatedReport.id)).resolves.toMatchObject({ id: repeatedReport.id, verdict: repeatedReport.verdict });
     expect(await fs.readFile(path.join(artifactDir, 'report.html'), 'utf8')).toContain(`Report ${repeatedReport.id}`);
     expect(await fs.readFile(path.join(artifactDir, 'RELEASEPROOF_FIX.md'), 'utf8')).toContain(`**Report ID**: ${repeatedReport.id}`);
   }, 35000);

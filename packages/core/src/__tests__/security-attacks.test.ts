@@ -6,7 +6,7 @@ import * as http from 'node:http';
 import { redactSecrets } from '@releaseproof/security';
 import { execCommand, spawnService } from '@releaseproof/runner';
 import { createCleanWorkspace } from '@releaseproof/sandbox';
-import { formatTerminalReport, generateAiHandoffMarkdown, generateHtmlReport } from '@releaseproof/reporter';
+import { formatTerminalReport, generateAiHandoffMarkdown, generateHtmlReport, publishReportArtifacts } from '@releaseproof/reporter';
 import { VerificationReport } from '@releaseproof/schemas';
 import { verifyProject } from '../engine.js';
 import { runReadmeContractCheck } from '../checks/readme.js';
@@ -167,6 +167,7 @@ describe('security attack & hardening test suite', () => {
         checks: { install: false, build: false, browser: false, environment: false, secrets: false, documentation: false, devProd: false },
       },
     });
+    await publishReportArtifacts(report, path.join(root, '.releaseproof'));
     const artifacts = [
       JSON.stringify(report),
       await fs.readFile(path.join(root, '.releaseproof', 'report.json'), 'utf8'),

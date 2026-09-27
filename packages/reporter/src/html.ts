@@ -283,7 +283,7 @@ export function generateHtmlReport(report: VerificationReport): string {
     <header>
       <div>
         <div class="brand">Release<span>Proof</span></div>
-        <div class="meta">${escapeHtml(report.projectName)} &bull; Report ${escapeHtml(report.id)} &bull; ${new Date(report.timestamp).toLocaleString()} &bull; ${(report.durationMs / 1000).toFixed(1)}s</div>
+        <div class="meta">${escapeHtml(report.projectName)} &bull; Report ${escapeHtml(report.id)} &bull; ${escapeHtml(new Date(report.timestamp).toISOString())} UTC &bull; ${(report.durationMs / 1000).toFixed(1)}s</div>
       </div>
       <div>
         <button class="btn btn-primary" onclick="copyForAi()">Copy for AI</button>

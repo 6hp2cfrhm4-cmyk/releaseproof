@@ -478,10 +478,6 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
 
   const report = VerificationReportSchema.parse(redactObject(rawReport, sensitiveValues));
 
-  // Save JSON report using absolute path on disk
-  const absoluteJsonPath = path.join(artifactsDir, 'report.json');
-  await writeAtomicFile(absoluteJsonPath, JSON.stringify(report, null, 2));
-
   return report;
 }
 
@@ -519,17 +515,6 @@ function buildCapabilitySummary(
     security: statusFor('security'),
     api: profileCapabilities.api ? statusFor('api') : { status: 'not_applicable', reason: 'No API capability was detected.' },
   };
-}
-
-async function writeAtomicFile(target: string, content: string): Promise<void> {
-  const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
-  await fs.writeFile(temporary, content, 'utf8');
-  try {
-    await fs.rename(temporary, target);
-  } catch (error) {
-    await fs.rm(temporary, { force: true }).catch(() => {});
-    throw error;
-  }
 }
 
 interface PythonCommands {

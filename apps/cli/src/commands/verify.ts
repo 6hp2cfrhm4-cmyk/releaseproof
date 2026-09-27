@@ -1,12 +1,7 @@
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import pc from 'picocolors';
 import { verifyProject } from '@releaseproof/core';
-import {
-  formatTerminalReport,
-  generateAiHandoffMarkdown,
-  generateHtmlReport,
-} from '@releaseproof/reporter';
+import { formatTerminalReport, publishReportArtifacts } from '@releaseproof/reporter';
 
 export interface VerifyCommandOptions {
   ci?: boolean;
@@ -20,7 +15,6 @@ export interface VerifyCommandOptions {
   target?: string;
   browser?: boolean;
 }
-
 export async function handleVerify(
   targetPath = '.',
   options: VerifyCommandOptions = {}
@@ -79,22 +73,7 @@ export async function handleVerify(
         }
       },
     });
-
-    // Write HTML report
-    if (report.htmlReportPath) {
-      const html = generateHtmlReport(report);
-      // Artifacts are always owned by the selected project, regardless of
-      // the caller's current working directory.
-      const absHtml = path.join(projectDir, '.releaseproof', 'report.html');
-      await writeAtomic(absHtml, html);
-    }
-
-    // Write AI Fix Prompt
-    if (report.fixPromptPath) {
-      const prompt = generateAiHandoffMarkdown(report);
-      const absFix = path.join(projectDir, '.releaseproof', 'RELEASEPROOF_FIX.md');
-      await writeAtomic(absFix, prompt);
-    }
+    await publishReportArtifacts(report, path.join(projectDir, '.releaseproof'));
 
     if (options.json) {
       console.log(JSON.stringify(report, null, 2));
@@ -126,16 +105,5 @@ export async function handleVerify(
   } finally {
     process.off('SIGINT', cancel);
     process.off('SIGTERM', cancel);
-  }
-}
-
-async function writeAtomic(target: string, content: string): Promise<void> {
-  const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
-  await fs.writeFile(temporary, content, 'utf8');
-  try {
-    await fs.rename(temporary, target);
-  } catch (error) {
-    await fs.rm(temporary, { force: true }).catch(() => {});
-    throw error;
   }
 }

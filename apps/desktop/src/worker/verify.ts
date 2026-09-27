@@ -1,7 +1,6 @@
-import { verifyProject } from '@releaseproof/core';
-import { generateHtmlReport, generateAiHandoffMarkdown } from '@releaseproof/reporter';
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { verifyProject } from '@releaseproof/core';
+import { publishReportArtifacts } from '@releaseproof/reporter';
 import type { RunEvent, WorkerEvent } from '../shared/ipc.js';
 
 let active: AbortController | undefined;
@@ -21,10 +20,7 @@ process.on('message', async (message: StartMessage | { type: 'cancel' }) => {
       signal: active.signal,
       onProgress: (step, status, detail) => emit({ type: 'progress', step, status, message: detail }),
     });
-    // Core paths are display-oriented and may be relative to process.cwd().
-    // Desktop artifacts are always rooted in the selected project.
-    if (report.htmlReportPath) await atomic(path.join(message.projectPath, '.releaseproof', 'report.html'), generateHtmlReport(report));
-    if (report.fixPromptPath) await atomic(path.join(message.projectPath, '.releaseproof', 'RELEASEPROOF_FIX.md'), generateAiHandoffMarkdown(report));
+    await publishReportArtifacts(report, path.join(message.projectPath, '.releaseproof'));
     emit({ type: 'finished', report });
   } catch (error) {
     emit({ type: 'error', message: error instanceof Error ? error.message : String(error) });
@@ -38,10 +34,3 @@ process.on('message', async (message: StartMessage | { type: 'cancel' }) => {
     }, 0).unref();
   }
 });
-
-async function atomic(file: string, content: string): Promise<void> {
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp-${process.pid}`;
-  await fs.writeFile(tmp, content, 'utf8');
-  await fs.rename(tmp, file);
-}

@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { detectProject } from '@releaseproof/detector';
 import { VerificationReportSchema } from '@releaseproof/schemas';
-import { generateAiHandoffMarkdown, generateFindingHandoffMarkdown } from '@releaseproof/reporter';
+import { assertReportArtifactSet, generateAiHandoffMarkdown, generateFindingHandoffMarkdown } from '@releaseproof/reporter';
 import type { DesktopSettings, DetectionPreview, RunEvent } from '../shared/ipc.js';
 import { assertAbsoluteProjectPath, validateArtifactKind, validateRunInput, validateSettingsPatch } from './validation.js';
 import { handleWorkerExit } from './worker-exit.js';
@@ -164,6 +164,7 @@ function registerIpc(): void {
     const artifactKind = validateArtifactKind(kind);
     const root = path.resolve(run.projectPath);
     const target = artifactKind === 'directory' ? path.join(root, '.releaseproof') : path.join(root, '.releaseproof', artifactKind === 'html' ? 'report.html' : 'RELEASEPROOF_FIX.md');
+    if (artifactKind !== 'directory') await assertReportArtifactSet(path.join(root, '.releaseproof'), run.report.id);
     await fs.access(target);
     if (target !== root && !target.startsWith(`${root}${path.sep}`)) throw new Error('Artifact path is outside the selected project.');
     if (kind === 'directory') await shell.openPath(target); else await shell.openPath(target);

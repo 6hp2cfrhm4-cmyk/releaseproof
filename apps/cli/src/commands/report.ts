@@ -1,8 +1,7 @@
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { spawn } from 'node:child_process';
 import pc from 'picocolors';
-import { VerificationReportSchema } from '@releaseproof/schemas';
+import { assertReportArtifactSet } from '@releaseproof/reporter';
 
 export async function handleReport(
   targetPath = '.',
@@ -13,9 +12,7 @@ export async function handleReport(
   const jsonPath = path.join(projectDir, '.releaseproof', 'report.json');
 
   try {
-    const raw = await fs.readFile(jsonPath, 'utf8');
-    const report = VerificationReportSchema.parse(JSON.parse(raw));
-    await fs.stat(htmlPath);
+    const report = await assertReportArtifactSet(path.dirname(jsonPath));
     console.log(pc.dim(`  Verdict: ${report.verdict} · score ${report.score}/100 · evidence ${Math.round(report.evidenceCoverage * 100)}%`));
   } catch {
     console.error(pc.red('No ReleaseProof report found.'));

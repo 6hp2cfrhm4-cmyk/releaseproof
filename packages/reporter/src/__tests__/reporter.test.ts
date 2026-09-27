@@ -1,9 +1,14 @@
 import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {
+  assertReportArtifactSet,
   formatTerminalReport,
   formatVibeCheckCard,
   generateAiHandoffMarkdown,
   generateHtmlReport,
+  publishReportArtifacts,
 } from '../index.js';
 import { VerificationReport } from '@releaseproof/schemas';
 
@@ -126,5 +131,40 @@ describe('reporters', () => {
     expect(html).toContain('ReleaseProof Report — test-app');
     expect(html).toContain(`Report ${mockReport.id}`);
     expect(html).toContain('copyForAi');
+  });
+
+  it('publishes one schema-valid report set and rejects stale or modified members', async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'releaseproof-report-set-'));
+    try {
+      await publishReportArtifacts(mockReport, directory);
+      await expect(assertReportArtifactSet(directory, mockReport.id)).resolves.toMatchObject({ id: mockReport.id, verdict: mockReport.verdict });
+
+      const manifest = JSON.parse(await fs.readFile(path.join(directory, 'report-manifest.json'), 'utf8'));
+      expect(manifest).toMatchObject({ schemaVersion: 1, reportId: mockReport.id });
+      expect(Object.keys(manifest.files).sort()).toEqual(['RELEASEPROOF_FIX.md', 'report.html', 'report.json'].sort());
+
+      const handoff = await fs.readFile(path.join(directory, 'RELEASEPROOF_FIX.md'), 'utf8');
+      expect(handoff).toContain(`**Status**: ${mockReport.verdict}`);
+      expect(handoff).toContain(`**Score**: ${mockReport.score} / 100`);
+      expect(handoff).toContain(mockReport.checks[0]!.id);
+
+      await expect(assertReportArtifactSet(directory, 'older-run-id')).rejects.toThrow(/different verification run/i);
+      await fs.appendFile(path.join(directory, 'report.html'), '<!-- stale content -->');
+      await expect(assertReportArtifactSet(directory, mockReport.id)).rejects.toThrow(/does not match the committed report set/i);
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('does not leave a commit manifest when report publication fails', async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'releaseproof-report-set-'));
+    try {
+      await fs.mkdir(path.join(directory, 'report.html'));
+      await expect(publishReportArtifacts(mockReport, directory)).rejects.toBeDefined();
+      await expect(fs.access(path.join(directory, 'report-manifest.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(assertReportArtifactSet(directory)).rejects.toThrow(/incomplete|no commit manifest/i);
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true });
+    }
   });
 });
