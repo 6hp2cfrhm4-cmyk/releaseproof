@@ -1,15 +1,15 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
-import { ProjectProfile } from '@releaseproof/schemas';
+import { PackageManagerType, ProjectProfile } from '@releaseproof/schemas';
 import { detectPackageManager } from './package-managers.js';
 import { analyzeFrameworks } from './frameworks.js';
 import { discoverStaticRoutes } from './routes.js';
 
 const TARGET_SCAN_IGNORES = new Set(['node_modules', '.git', '.next', 'dist', 'build', '.releaseproof', '.venv', 'venv', '__pycache__', 'fixtures', 'examples', 'benchmarks', 'docs', 'scripts', 'packages']);
 
-export async function detectProject(projectDir: string): Promise<ProjectProfile> {
+export async function detectProject(projectDir: string, packageManagerOverride?: PackageManagerType): Promise<ProjectProfile> {
   const absoluteDir = path.resolve(projectDir);
-  const packageManager = await detectPackageManager(absoluteDir);
+  const packageManager = await detectPackageManager(absoluteDir, packageManagerOverride);
   const analysis = await analyzeFrameworks(absoluteDir, packageManager);
   const routes = await discoverStaticRoutes(absoluteDir);
 

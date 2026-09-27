@@ -130,4 +130,20 @@ describe('schemas', () => {
       durationMs: 1, artifactsDir: '.releaseproof',
     })).toThrow(/unknown\/skipped|complete evidence/);
   });
+
+  it('accepts legacy and same-major reports but rejects unsupported schema majors', () => {
+    const legacy = {
+      id: 'versioned-report', version: '0.2.0-dev.0', timestamp: new Date().toISOString(),
+      projectName: 'app', projectPath: '.', profile: { root: '.', name: 'app' },
+      verdict: 'INCOMPLETE', score: 0, categoryScores: {},
+      counts: { total: 0, passed: 0, warnings: 0, blockers: 0, unknown: 0, skipped: 0, notApplicable: 0 },
+      checks: [], durationMs: 1, artifactsDir: '.releaseproof',
+    };
+    expect(VerificationReportSchema.parse(legacy).schemaVersion).toBeUndefined();
+    expect(VerificationReportSchema.parse({ ...legacy, schemaVersion: '1.3.0' }).schemaVersion).toBe('1.3.0');
+    expect(() => VerificationReportSchema.parse({ ...legacy, schemaVersion: '2.0.0' }))
+      .toThrow(/Unsupported report schema major version 2; upgrade ReleaseProof/);
+    expect(() => VerificationReportSchema.parse({ ...legacy, schemaVersion: 'not-semver' }))
+      .toThrow(/semantic version/);
+  });
 });

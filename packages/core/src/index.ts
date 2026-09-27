@@ -1,5 +1,6 @@
 export * from './scoring.js';
 export * from './engine.js';
+export * from './artifact-path.js';
 export * from './checks/install.js';
 export * from './checks/build.js';
 export * from './checks/startup.js';

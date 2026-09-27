@@ -69,6 +69,11 @@ runs:
         INPUT_TARGET: ${{ inputs.target }}
       run: |
         set -uo pipefail
+        if [[ "$INPUT_FAIL_ON_BLOCKER" != "true" && "$INPUT_FAIL_ON_BLOCKER" != "false" ]] || \
+           [[ "$INPUT_FAIL_ON_INCOMPLETE" != "true" && "$INPUT_FAIL_ON_INCOMPLETE" != "false" ]]; then
+          echo "fail-on-blocker and fail-on-incomplete must be true or false." >&2
+          exit 3
+        fi
         ARGS=(verify "$INPUT_PATH" --ci)
         if [ -n "$INPUT_PORT" ]; then
           ARGS+=(--port "$INPUT_PORT")
@@ -89,7 +94,7 @@ runs:
 
         REPORT_JSON="$INPUT_PATH/.releaseproof/report.json"
         if [ -f "$REPORT_JSON" ]; then
-          node "$GITHUB_ACTION_PATH/scripts/write-action-results.mjs" "$REPORT_JSON"
+          node "$GITHUB_ACTION_PATH/scripts/write-action-results.mjs" "$REPORT_JSON" || EXIT_CODE=3
         fi
 
         # The CLI always preserves its documented exit code. The Action's

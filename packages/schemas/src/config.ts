@@ -1,7 +1,11 @@
 import { z } from 'zod';
 
+export const ReleaseProofPackageManagerSchema = z.enum(['npm', 'pnpm', 'yarn', 'pip', 'uv']);
+export type ReleaseProofPackageManager = z.infer<typeof ReleaseProofPackageManagerSchema>;
+
 export const ReleaseProofConfigSchema = z.object({
   target: z.string().min(1).optional(),
+  packageManager: ReleaseProofPackageManagerSchema.optional(),
   ignoreDirs: z.array(z.string()).default([]),
   build: z.object({
     command: z.string().optional(),

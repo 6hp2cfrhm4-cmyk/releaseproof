@@ -1,16 +1,17 @@
 import * as path from 'node:path';
 import { verifyProject } from '@releaseproof/core';
 import { publishReportArtifacts } from '@releaseproof/reporter';
-import type { RunEvent, WorkerEvent } from '../shared/ipc.js';
+import type { WorkerEvent } from '../shared/ipc.js';
+import { parseWorkerRequest, toWorkerRunEvent } from '../shared/protocol.js';
 
 let active: AbortController | undefined;
-type StartMessage = { runId: string; projectPath: string; target?: string; timeoutMs?: number; cleanWorkspace?: boolean };
-process.on('message', async (message: StartMessage | { type: 'cancel' }) => {
-  if ('type' in message && message.type === 'cancel') { active?.abort(); return; }
-  if (!('runId' in message) || !message.runId || !message.projectPath) return;
+process.on('message', async (rawMessage: unknown) => {
+  const message = parseWorkerRequest(rawMessage);
+  if (!message) return;
+  if (message.type === 'cancel') { active?.abort(); return; }
   const runId = message.runId;
   active = new AbortController();
-  const emit = (event: WorkerEvent) => process.send?.({ ...event, runId } satisfies RunEvent);
+  const emit = (event: WorkerEvent) => process.send?.(toWorkerRunEvent(event, runId));
   emit({ type: 'started' });
   try {
     const report = await verifyProject({

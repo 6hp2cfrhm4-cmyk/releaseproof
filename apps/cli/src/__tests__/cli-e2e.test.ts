@@ -34,14 +34,19 @@ http.createServer((req, res) => {
       start: { port: configuredPort, healthCheckPath: '/health', stabilityWindowMs: 100 },
       checks: minimalChecks(),
     }));
+    const outputDir = '.releaseproof/custom reports';
 
     // Leave enough startup budget for a fully parallel Windows suite; the assertion below
     // still proves that the CLI port override and nested project config are both applied.
-    const result = await runCli(['verify', root, '--port', String(cliPort), '--timeout', '8000', '--json', '--skip-sandbox']);
+    const result = await runCli([
+      'verify', '--package-manager', 'pnpm', '--output-dir', outputDir,
+      root, '--port', String(cliPort), '--timeout', '8000', '--json', '--skip-sandbox',
+    ]);
     expect(result.code, JSON.stringify(result)).toBe(0);
     const report = JSON.parse(result.stdout);
     expect(report.verdict).toBe('READY');
-    const artifactDir = path.join(root, '.releaseproof');
+    expect(report.profile.packageManagers[0].type).toBe('pnpm');
+    const artifactDir = path.join(root, outputDir);
     const diskReport = JSON.parse(await fs.readFile(path.join(artifactDir, 'report.json'), 'utf8'));
     const htmlReport = await fs.readFile(path.join(artifactDir, 'report.html'), 'utf8');
     const aiHandoff = await fs.readFile(path.join(artifactDir, 'RELEASEPROOF_FIX.md'), 'utf8');
@@ -53,17 +58,13 @@ http.createServer((req, res) => {
     const processEvidence = report.checks.find((check: any) => check.id === 'startup-check').evidence.find((item: any) => item.type === 'process');
     expect(processEvidence.port).toBe(cliPort);
     expect(report.checks.find((check: any) => check.id === 'startup-check').summary).toContain('100ms');
-    const validReportCommand = await runCli(['report', root, '--no-open']);
+    const validReportCommand = await runCli(['report', root, '--no-open', '--output-dir', outputDir]);
     expect(validReportCommand.code, JSON.stringify(validReportCommand)).toBe(0);
-    await fs.appendFile(path.join(artifactDir, 'report.html'), '<!-- unexpected stale data -->');
-    const tamperedReportCommand = await runCli(['report', root, '--no-open']);
-    expect(tamperedReportCommand.code).toBe(1);
-    expect(tamperedReportCommand.stderr).toContain('No ReleaseProof report found.');
-    const tamperedVibeCommand = await runCli(['vibe', root]);
-    expect(tamperedVibeCommand.code).not.toBe(0);
-    expect(tamperedVibeCommand.stdout).not.toContain('Vibe check');
 
-    const repeated = await runCli(['verify', root, '--port', String(cliPort), '--timeout', '8000', '--json', '--skip-sandbox']);
+    const repeated = await runCli([
+      'verify', root, '--port', String(cliPort), '--timeout', '8000', '--json', '--skip-sandbox',
+      '--package-manager', 'pnpm', '--output-dir', outputDir,
+    ]);
     expect(repeated.code, JSON.stringify(repeated)).toBe(0);
     const repeatedReport = JSON.parse(repeated.stdout);
     expect(repeatedReport.id).not.toBe(report.id);
@@ -72,6 +73,14 @@ http.createServer((req, res) => {
     await expect(assertReportArtifactSet(artifactDir, repeatedReport.id)).resolves.toMatchObject({ id: repeatedReport.id, verdict: repeatedReport.verdict });
     expect(await fs.readFile(path.join(artifactDir, 'report.html'), 'utf8')).toContain(`Report ${repeatedReport.id}`);
     expect(await fs.readFile(path.join(artifactDir, 'RELEASEPROOF_FIX.md'), 'utf8')).toContain(`**Report ID**: ${repeatedReport.id}`);
+
+    await fs.appendFile(path.join(artifactDir, 'report.html'), '<!-- unexpected stale data -->');
+    const tamperedReportCommand = await runCli(['report', root, '--no-open', '--output-dir', outputDir]);
+    expect(tamperedReportCommand.code).toBe(1);
+    expect(tamperedReportCommand.stderr).toContain('No ReleaseProof report found.');
+    const tamperedVibeCommand = await runCli(['vibe', root, '--output-dir', outputDir]);
+    expect(tamperedVibeCommand.code).not.toBe(0);
+    expect(tamperedVibeCommand.stdout).not.toContain('Vibe check');
   }, 35000);
 
   it('publishes and validates the complete report set when vibe performs the first verification', async () => {
@@ -107,6 +116,17 @@ http.createServer((req, res) => {
     expect(notReady.code, JSON.stringify(notReady)).toBe(1);
     expect((await runCli(['verify', root, '--port', 'invalid', '--json', '--skip-sandbox'])).code).toBe(3);
   }, 15000);
+
+  it('rejects invalid package manager and output directory before writing project artifacts', async () => {
+    const root = await createNodeFixture(roots, `require('node:http').createServer((_q,r)=>r.end('ok')).listen(Number(process.env.PORT),'127.0.0.1');`);
+    const invalidManager = await runCli(['verify', root, '--package-manager', 'not-a-manager', '--json']);
+    expect(invalidManager.code).toBe(3);
+    expect(await exists(path.join(root, '.releaseproof'))).toBe(false);
+
+    const invalidOutput = await runCli(['verify', root, '--output-dir', '../outside', '--json']);
+    expect(invalidOutput.code).toBe(3);
+    expect(await exists(path.join(root, '.releaseproof'))).toBe(false);
+  });
 
   it.skipIf(process.platform === 'win32')('cleans its temporary workspace after SIGINT', async () => {
     const root = await createNodeFixture(roots, `require('node:http').createServer((_q,r)=>r.end('ok')).listen(Number(process.env.PORT),'127.0.0.1');`);

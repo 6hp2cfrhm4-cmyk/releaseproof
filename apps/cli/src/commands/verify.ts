@@ -1,7 +1,9 @@
 import * as path from 'node:path';
 import pc from 'picocolors';
 import { verifyProject } from '@releaseproof/core';
+import type { ReleaseProofPackageManager } from '@releaseproof/schemas';
 import { formatTerminalReport, publishReportArtifacts } from '@releaseproof/reporter';
+import { assertOutputDirectoryWritable, resolveArtifactDirectory } from './artifact-path.js';
 
 export interface VerifyCommandOptions {
   ci?: boolean;
@@ -14,6 +16,8 @@ export interface VerifyCommandOptions {
   inPlace?: boolean;
   target?: string;
   browser?: boolean;
+  packageManager?: ReleaseProofPackageManager;
+  outputDir?: string;
 }
 export async function handleVerify(
   targetPath = '.',
@@ -41,6 +45,7 @@ export async function handleVerify(
     ...(Object.keys(startConfig).length > 0 ? { start: startConfig } : {}),
     ...(options.pythonInterpreter ? { python: { interpreter: path.resolve(options.pythonInterpreter) } } : {}),
     ...(options.target ? { target: options.target } : {}),
+    ...(options.packageManager ? { packageManager: options.packageManager } : {}),
     ...(options.browser === false ? { checks: { browser: false }, browser: { enabled: false } } : {}),
   };
 
@@ -50,6 +55,8 @@ export async function handleVerify(
   process.once('SIGINT', cancel);
   process.once('SIGTERM', cancel);
   try {
+    const artifactsDir = await resolveArtifactDirectory(projectDir, options.outputDir);
+    await assertOutputDirectoryWritable(artifactsDir, options.outputDir !== undefined);
     if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535)) {
       throw new Error(`Invalid --port value: ${options.port}`);
     }
@@ -58,6 +65,7 @@ export async function handleVerify(
     }
     const report = await verifyProject({
       projectDir,
+      outputDir: options.outputDir,
       skipSandbox: options.inPlace || options.skipSandbox,
       config: cliConfig,
       signal: controller.signal,
@@ -73,7 +81,7 @@ export async function handleVerify(
         }
       },
     });
-    await publishReportArtifacts(report, path.join(projectDir, '.releaseproof'));
+    await publishReportArtifacts(report, artifactsDir);
 
     if (options.json) {
       console.log(JSON.stringify(report, null, 2));

@@ -4,20 +4,34 @@ import pc from 'picocolors';
 import { VerificationReport } from '@releaseproof/schemas';
 import { assertReportArtifactSet, formatVibeCheckCard, publishReportArtifacts } from '@releaseproof/reporter';
 import { verifyProject } from '@releaseproof/core';
+import { assertOutputDirectoryWritable, resolveArtifactDirectory } from './artifact-path.js';
 
-export async function handleVibe(targetPath = '.'): Promise<void> {
+export async function handleVibe(targetPath = '.', options: { outputDir?: string } = {}): Promise<void> {
   const projectDir = path.resolve(targetPath);
-  const artifactDir = path.join(projectDir, '.releaseproof');
+  let artifactDir: string;
+  try { artifactDir = await resolveArtifactDirectory(projectDir, options.outputDir); }
+  catch (error: unknown) {
+    console.error(pc.red(error instanceof Error ? error.message : String(error)));
+    process.exitCode = 3;
+    return;
+  }
   const manifestPath = path.join(artifactDir, 'report-manifest.json');
 
   let report: VerificationReport;
-  if (await pathExists(manifestPath)) {
-    report = await assertReportArtifactSet(artifactDir);
-  } else {
-    // If not scanned yet, run verification
-    console.log(pc.dim('No existing scan found. Running verification...'));
-    report = await verifyProject({ projectDir });
-    await publishReportArtifacts(report, artifactDir);
+  try {
+    if (await pathExists(manifestPath)) {
+      report = await assertReportArtifactSet(artifactDir);
+    } else {
+      await assertOutputDirectoryWritable(artifactDir, options.outputDir !== undefined);
+      // If not scanned yet, run verification
+      console.log(pc.dim('No existing scan found. Running verification...'));
+      report = await verifyProject({ projectDir, outputDir: options.outputDir });
+      await publishReportArtifacts(report, artifactDir);
+    }
+  } catch (error: unknown) {
+    console.error(pc.red(error instanceof Error ? error.message : String(error)));
+    process.exitCode = 3;
+    return;
   }
 
   console.log('');

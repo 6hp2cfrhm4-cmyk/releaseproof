@@ -214,7 +214,15 @@ export async function analyzeFrameworks(
   // Check Python (FastAPI / generic)
   const hasRequirements = await checkExists('requirements.txt');
   const hasPyproject = await checkExists('pyproject.toml');
+  const hasUvLock = await checkExists('uv.lock');
   const hasMainPy = await checkExists('main.py') || await checkExists('app/main.py');
+  const pythonInstallCommand = () => packageManager.type === 'uv'
+    ? hasUvLock
+      ? 'uv sync --locked --active'
+      : hasRequirements
+        ? 'uv pip install -r requirements.txt'
+        : 'uv sync --active'
+    : hasRequirements ? 'python -m pip install -r requirements.txt' : 'python -m pip install .';
 
   if (hasRequirements || hasPyproject || hasMainPy) {
     languages.add('python');
@@ -262,7 +270,7 @@ export async function analyzeFrameworks(
       hasApi = true;
       ports.add(8000);
 
-      commands.install = hasRequirements ? 'python -m pip install -r requirements.txt' : 'python -m pip install .';
+      commands.install = pythonInstallCommand();
       commands.dev = 'python -m uvicorn main:app --reload --port 8000';
       commands.start = 'python -m uvicorn main:app --host 127.0.0.1 --port 8000';
     } else if (languages.has('python') && frameworks.length === 0) {
@@ -271,7 +279,7 @@ export async function analyzeFrameworks(
         name: 'Generic Python',
         confidence: 0.7,
       });
-      commands.install = hasRequirements ? 'python -m pip install -r requirements.txt' : 'python -m pip install .';
+      commands.install = pythonInstallCommand();
     }
   }
 

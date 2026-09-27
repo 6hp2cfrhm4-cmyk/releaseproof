@@ -14,6 +14,8 @@ import { analyzeEnvironment } from '@releaseproof/environment';
 import { scanForSecrets, redactObject } from '@releaseproof/security';
 import { verifyBrowserApp } from '@releaseproof/browser';
 import { execCommand } from '@releaseproof/runner';
+import { resolveArtifactDirectory } from './artifact-path.js';
+import { inspectPackageManagerPolicy } from './package-manager-policy.js';
 
 import { runInstallCheck } from './checks/install.js';
 import { runBuildCheck } from './checks/build.js';
@@ -28,6 +30,8 @@ export interface ProgressCallback {
 
 export interface EngineOptions {
   projectDir: string;
+  /** Relative to projectDir and restricted to .releaseproof/ and its descendants. */
+  outputDir?: string;
   config?: ReleaseProofUserConfig;
   onProgress?: ProgressCallback;
   skipSandbox?: boolean;
@@ -36,14 +40,17 @@ export interface EngineOptions {
 
 export async function verifyProject(options: EngineOptions): Promise<VerificationReport> {
   const startTime = Date.now();
-  let projectDir = path.resolve(options.projectDir);
-  const artifactsDir = path.join(projectDir, '.releaseproof');
+  const requestedProjectDir = path.resolve(options.projectDir);
+  // Validate the selected root before creating report folders or other output.
+  const projectRoot = await fs.realpath(requestedProjectDir);
+  const rootStat = await fs.stat(projectRoot);
+  if (!rootStat.isDirectory()) throw new Error('Selected project path is not a directory.');
+  let projectDir = projectRoot;
+  const artifactsDir = await resolveArtifactDirectory(projectRoot, options.outputDir);
   const screenshotsDir = path.join(artifactsDir, 'screenshots');
   const signal = options.signal;
   const progress: ProgressCallback = options.onProgress ?? (() => {});
 
-  await fs.mkdir(artifactsDir, { recursive: true });
-  await fs.mkdir(screenshotsDir, { recursive: true });
   throwIfAborted(signal);
 
   // Load local project config if present. A malformed config is user input,
@@ -83,13 +90,29 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
   const config = ReleaseProofConfigSchema.parse(mergedConfig);
 
   if (config.target) {
-    const resolvedTarget = path.resolve(projectDir, config.target);
-    const relativeTarget = path.relative(projectDir, resolvedTarget);
-    if (relativeTarget.startsWith('..') || path.isAbsolute(relativeTarget)) {
+    const resolvedTarget = path.resolve(projectRoot, config.target);
+    const relativeTarget = path.relative(projectRoot, resolvedTarget);
+    if (relativeTarget === '..' || relativeTarget.startsWith(`..${path.sep}`) || path.isAbsolute(relativeTarget)) {
       throw new Error(`Configured target escapes the project directory: ${config.target}`);
     }
-    projectDir = resolvedTarget;
+    const canonicalTarget = await fs.realpath(resolvedTarget);
+    const canonicalRelativeTarget = path.relative(projectRoot, canonicalTarget);
+    if (canonicalRelativeTarget === '..' || canonicalRelativeTarget.startsWith(`..${path.sep}`) || path.isAbsolute(canonicalRelativeTarget)) {
+      throw new Error(`Configured target escapes the project directory through a symlink: ${config.target}`);
+    }
+    if (!(await fs.stat(canonicalTarget)).isDirectory()) {
+      throw new Error(`Configured target is not a directory: ${config.target}`);
+    }
+    projectDir = canonicalTarget;
   }
+
+  // The request, config and selected target are now validated. Outputs may be
+  // created only after those checks, so bad input cannot leave project files.
+  throwIfAborted(signal);
+  await fs.mkdir(artifactsDir, { recursive: true });
+  await fs.mkdir(screenshotsDir, { recursive: true });
+  // Invalidate a previous run before execution; a process crash cannot leave an old READY report looking current.
+  await fs.rm(path.join(artifactsDir, 'report-manifest.json'), { force: true });
 
   const allChecks: CheckResult[] = [];
 
@@ -108,7 +131,17 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
 
   // Phase 1: Detect Project Profile
   progress('Detecting project profile', 'running');
-  const profile = await detectProject(projectDir);
+  const detectedProfile = await detectProject(projectDir);
+  const managerPolicy = await inspectPackageManagerPolicy(
+    projectDir,
+    detectedProfile.languages,
+    detectedProfile.packageManagers[0]?.type,
+    config.packageManager,
+  );
+  const profile = managerPolicy.canExecute && managerPolicy.manager
+    ? await detectProject(projectDir, managerPolicy.manager)
+    : detectedProfile;
+  allChecks.push(...managerPolicy.findings);
   progress(
     'Detecting project profile',
     'done',
@@ -116,7 +149,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
   );
 
   const primaryPackageManager = profile.packageManagers[0];
-  if (profile.languages.some((language) => language === 'javascript' || language === 'typescript')) {
+  if (managerPolicy.canExecute && profile.languages.some((language) => language === 'javascript' || language === 'typescript')) {
     allChecks.push({
       id: 'install-lockfile-policy',
       title: primaryPackageManager?.lockfile ? 'Lockfile-enforcing install selected' : 'Dependency lockfile not found',
@@ -199,11 +232,11 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     }
     throwIfAborted(signal);
     progress('Creating isolated clean verification workspace', 'done');
-    pythonRuntimeDir = profile.languages.includes('python')
+    pythonRuntimeDir = managerPolicy.canExecute && profile.languages.includes('python')
       ? path.join(workspace.path, '.releaseproof', `python-${randomBytes(6).toString('hex')}`)
       : undefined;
 
-    if (profile.languages.includes('python') && (installCommand || buildCommand || startCommand)) {
+    if (managerPolicy.canExecute && profile.languages.includes('python') && (installCommand || buildCommand || startCommand)) {
       const prepared = await preparePythonExecution(workspace.path, pythonRuntimeDir!, { installCommand, buildCommand, startCommand }, executionEnvironment, allowHostEnv, config.python?.interpreter, signal);
       if (!prepared.ok) {
         allChecks.push({
@@ -235,7 +268,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
     }
 
     // Phase 4: Clean Install
-    if (config.checks?.install !== false && installCommand) {
+    if (managerPolicy.canExecute && config.checks?.install !== false && installCommand) {
       progress('Running clean installation', 'running', installCommand);
       const installRes = await runInstallCheck(workspace.path, installCommand, executionEnvironment, allowHostEnv, signal);
       allChecks.push(installRes);
@@ -258,7 +291,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
 
     // Phase 5: Production Build
     const buildCmd = buildCommand;
-    if (config.checks?.build !== false && buildCmd) {
+    if (managerPolicy.canExecute && config.checks?.build !== false && buildCmd) {
       progress('Running production build', 'running', buildCmd);
       const buildRes = await runBuildCheck(workspace.path, buildCmd, executionEnvironment, allowHostEnv, signal);
       allChecks.push(buildRes);
@@ -280,7 +313,7 @@ export async function verifyProject(options: EngineOptions): Promise<Verificatio
 
     // Phase 6: Production Startup & Health Check
     const startCmd = startCommand;
-    if (config.checks?.startup !== false && startCmd) {
+    if (managerPolicy.canExecute && config.checks?.startup !== false && startCmd) {
       progress('Starting production server', 'running', `port ${activePort}`);
       const startupRes = await runStartupCheck(
         workspace.path,
@@ -615,6 +648,10 @@ async function preparePythonExecution(
       const quote = JSON.stringify(resolvedInterpreter);
       const rewrite = (command?: string) => {
         if (!command) return command;
+        if (/^uv\s+sync\b/i.test(command)) return command;
+        if (/^uv\s+pip\s+install\b/i.test(command)) {
+          return command.replace(/^uv\s+pip\s+install\b/i, `uv pip install --python ${quote}`);
+        }
         if (/^(?:python|python3|py\s+-3)\s+-m\s+pip\s+/i.test(command)) {
           return command.replace(/^(?:python|python3|py\s+-3)\s+-m\s+pip/i, `${quote} -m pip`);
         }

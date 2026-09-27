@@ -48,6 +48,42 @@ describe('detector', () => {
     expect(profile.commands.install).toBe('npm ci');
   });
 
+  it('honors packageManager declarations and explicit Node manager overrides', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'rp-detector-manager-'));
+    try {
+      await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({
+        name: 'manager-override', packageManager: 'pnpm@9.15.0',
+        dependencies: { express: '4.21.0' }, scripts: { start: 'node server.js', build: 'node build.js' },
+      }));
+      await fs.writeFile(path.join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
+
+      const declared = await detectProject(root);
+      expect(declared.packageManagers[0]?.type).toBe('pnpm');
+      expect(declared.commands.install).toBe('pnpm install --frozen-lockfile');
+
+      const overridden = await detectProject(root, 'npm');
+      expect(overridden.packageManagers[0]?.type).toBe('npm');
+      expect(overridden.commands.install).toBe('npm install');
+      expect(overridden.commands.start).toBe('npm run start');
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('uses uv locked sync for a Python project with uv.lock', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'rp-detector-uv-'));
+    try {
+      await fs.writeFile(path.join(root, 'pyproject.toml'), '[project]\nname="uv-app"\ndependencies=["fastapi"]');
+      await fs.writeFile(path.join(root, 'uv.lock'), 'version = 1');
+      await fs.writeFile(path.join(root, 'main.py'), 'from fastapi import FastAPI\napp = FastAPI()');
+      const profile = await detectProject(root, 'uv');
+      expect(profile.packageManagers[0]?.type).toBe('uv');
+      expect(profile.commands.install).toBe('uv sync --locked --active');
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('uses the Vite production preview port rather than the dev-server port', async () => {
     await fs.mkdir(testRoot, { recursive: true });
     await fs.writeFile(path.join(testRoot, 'package.json'), JSON.stringify({

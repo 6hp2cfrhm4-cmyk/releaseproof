@@ -97,6 +97,18 @@ export const VerificationReportSchema = z.object({
   htmlReportPath: z.string().optional(),
   jsonReportPath: z.string().optional(),
 }).superRefine((report, context) => {
+  if (report.schemaVersion !== undefined) {
+    const version = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.exec(report.schemaVersion);
+    if (!version) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['schemaVersion'], message: 'Report schemaVersion must be a semantic version.' });
+    } else if (Number(version[1]) !== 1) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['schemaVersion'],
+        message: `Unsupported report schema major version ${version[1]}; upgrade ReleaseProof to read this report.`,
+      });
+    }
+  }
   if (report.runStatus === 'cancelled' && report.verdict !== 'CANCELLED') {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['verdict'], message: 'Cancelled runs must not contain a shipping verdict.' });
   }

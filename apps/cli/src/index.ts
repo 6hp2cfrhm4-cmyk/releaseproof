@@ -19,7 +19,9 @@ program
   .option('--timeout <ms>', 'Server startup timeout in milliseconds')
   .option('--port <port>', 'Port to verify')
   .option('--python-interpreter <path>', 'Python interpreter used to create the verification venv')
+  .option('--package-manager <manager>', 'Override project package manager: npm, pnpm, yarn, pip, or uv')
   .option('--target <relative-path>', 'Runnable target inside a monorepo')
+  .option('--output-dir <path>', 'Report directory relative to the project, inside .releaseproof/')
   .option('--no-browser', 'Skip browser verification explicitly')
   .option('--in-place', 'Development-only alias for --skip-sandbox')
   .option('--skip-sandbox', 'Run checks in place without copying to temporary clean-room')
@@ -37,7 +39,9 @@ program
   .option('--timeout <ms>', 'Server startup timeout in milliseconds')
   .option('--port <port>', 'Port to verify')
   .option('--python-interpreter <path>', 'Python interpreter used to create the verification venv')
+  .option('--package-manager <manager>', 'Override project package manager: npm, pnpm, yarn, pip, or uv')
   .option('--target <relative-path>', 'Runnable target inside a monorepo')
+  .option('--output-dir <path>', 'Report directory relative to the project, inside .releaseproof/')
   .option('--no-browser', 'Skip browser verification explicitly')
   .option('--in-place', 'Development-only alias for --skip-sandbox')
   .option('--skip-sandbox', 'Run checks in place without copying to temporary clean-room')
@@ -50,16 +54,18 @@ program
   .description('Open or inspect latest verification HTML report')
   .argument('[path]', 'Project directory', '.')
   .option('--no-open', 'Do not automatically launch browser')
-  .action((targetPath, options) => {
-    handleReport(targetPath, options);
+  .option('--output-dir <path>', 'Read reports from a directory inside .releaseproof/')
+  .action((targetPath, _options, command) => {
+    handleReport(targetPath, command.optsWithGlobals());
   });
 
 program
   .command('vibe')
   .description('Generate shareable terminal vibe check card')
   .argument('[path]', 'Project directory', '.')
-  .action((targetPath) => {
-    handleVibe(targetPath);
+  .option('--output-dir <path>', 'Read or write reports inside .releaseproof/')
+  .action((targetPath, _options, command) => {
+    handleVibe(targetPath, command.optsWithGlobals());
   });
 
 program
@@ -67,16 +73,17 @@ program
   .description('Inspect environment dependencies and tools')
   .argument('[path]', 'Project directory', '.')
   .option('--json', 'Output machine-readable capability results')
-  .action((targetPath, options) => {
-    handleDoctor(targetPath, options);
+  .action((targetPath, _options, command) => {
+    handleDoctor(targetPath, command.optsWithGlobals());
   });
 
 program
   .command('clean')
   .description('Clean ReleaseProof artifact directory')
   .argument('[path]', 'Project directory', '.')
-  .action((targetPath) => {
-    handleClean(targetPath);
+  .option('--output-dir <path>', 'Clean this directory inside .releaseproof/')
+  .action((targetPath, _options, command) => {
+    handleClean(targetPath, command.optsWithGlobals());
   });
 
 await program.parseAsync(process.argv);

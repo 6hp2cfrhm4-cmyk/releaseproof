@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import type { DesktopSettings } from '../shared/ipc.js';
 
 export function assertAbsoluteProjectPath(value: unknown): string {
-  if (typeof value !== 'string' || !path.isAbsolute(value)) {
+  if (typeof value !== 'string' || value.length > 32768 || !path.isAbsolute(value)) {
     throw new Error('A canonical absolute project path is required.');
   }
   const normalized = path.normalize(value);
@@ -17,10 +17,12 @@ export function validateRunInput(value: unknown): { projectPath: string; target?
   if (input.trusted !== true) throw new Error('Trust acknowledgement is required before executing project code.');
   let target: string | undefined;
   if (input.target !== undefined) {
-    if (typeof input.target !== 'string' || !input.target.trim() || path.isAbsolute(input.target) || input.target.includes('\0')) {
+    if (typeof input.target !== 'string' || !input.target.trim() || input.target.length > 1024 || path.isAbsolute(input.target)
+      || path.win32.isAbsolute(input.target) || /^[A-Za-z]:/.test(input.target) || input.target.includes('\0')
+      || input.target.replace(/\\/g, '/').split('/').some((segment) => segment === '..')) {
       throw new Error('Target must be a non-empty relative path inside the selected project.');
     }
-    target = input.target;
+    target = input.target.replace(/\\/g, '/');
   }
   let timeoutMs: number | undefined;
   if (input.timeoutMs !== undefined) {

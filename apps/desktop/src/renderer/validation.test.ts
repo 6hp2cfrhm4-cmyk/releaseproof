@@ -7,6 +7,9 @@ describe('desktop IPC validation', () => {
   it('requires trust and keeps targets relative to the selected project', () => {
     expect(() => validateRunInput({ projectPath, trusted: false })).toThrow(/Trust acknowledgement/);
     expect(() => validateRunInput({ projectPath, trusted: true, target: process.platform === 'win32' ? 'C:\\other' : '/other' })).toThrow(/relative path/);
+    expect(() => validateRunInput({ projectPath, trusted: true, target: '../outside' })).toThrow(/relative path/);
+    expect(() => validateRunInput({ projectPath, trusted: true, target: 'apps\\..\\outside' })).toThrow(/relative path/);
+    expect(() => validateRunInput({ projectPath, trusted: true, target: 'C:outside' })).toThrow(/relative path/);
     expect(validateRunInput({ projectPath, trusted: true, target: 'apps/web', timeoutMs: 999999 })).toEqual({
       projectPath, target: 'apps/web', trusted: true, timeoutMs: 600000,
     });

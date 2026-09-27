@@ -9,6 +9,7 @@ import { detectProject } from '@releaseproof/detector';
 import { VerificationReportSchema } from '@releaseproof/schemas';
 import { assertReportArtifactSet, generateAiHandoffMarkdown, generateFindingHandoffMarkdown } from '@releaseproof/reporter';
 import type { DesktopSettings, DetectionPreview, RunEvent } from '../shared/ipc.js';
+import { parseWorkerEvent } from '../shared/protocol.js';
 import { assertAbsoluteProjectPath, validateArtifactKind, validateRunInput, validateSettingsPatch } from './validation.js';
 import { handleWorkerExit } from './worker-exit.js';
 
@@ -85,11 +86,23 @@ function registerIpc(): void {
     const workerPath = path.join(__dirname, '../worker/verify.js');
     const worker = fork(workerPath, [], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
     runs.set(runId, { projectPath, worker });
-    worker.on('message', (event: RunEvent) => {
+    worker.on('message', (rawEvent: unknown) => {
+      const event = parseWorkerEvent(rawEvent, runId);
+      if (!event) {
+        const run = runs.get(runId);
+        if (run && !run.terminal) {
+          run.terminal = true;
+          run.worker?.kill();
+          send({ type: 'error', runId, message: 'Verification worker sent an invalid or oversized event. See Technical details and retry.' });
+        }
+        return;
+      }
+      const currentRun = runs.get(runId);
+      if (!currentRun || currentRun.terminal) return;
       if (event.type === 'finished') {
         try {
           const parsed = VerificationReportSchema.parse(event.report);
-          const run = runs.get(runId);
+          const run = currentRun;
           if (run) { run.report = parsed; run.terminal = true; }
           send({ ...event, report: parsed });
           if (run?.worker?.connected) run.worker.disconnect();
@@ -111,7 +124,7 @@ function registerIpc(): void {
       if (run) handleWorkerExit(runId, code, run, send);
       if (run) run.worker = undefined;
     });
-    worker.send({ runId, projectPath, target: input.target, timeoutMs: input.timeoutMs ?? settingsCache.defaultTimeoutMs, cleanWorkspace: settingsCache.cleanWorkspace });
+    worker.send({ type: 'start', runId, projectPath, target: input.target, timeoutMs: input.timeoutMs ?? settingsCache.defaultTimeoutMs, cleanWorkspace: settingsCache.cleanWorkspace });
     return runId;
   });
   ipcMain.handle('run:cancel', async (_event, runId: unknown) => {

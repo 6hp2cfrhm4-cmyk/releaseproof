@@ -144,6 +144,40 @@ jobs:
           STATUS: ${{ steps.incomplete-allowed.outputs.status }}
         run: test "$STATUS" = "INCOMPLETE"
 
+      - name: Prepare project path containing spaces
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/releaseproof path with spaces"
+          cp -R fixtures/express-working/. "$RUNNER_TEMP/releaseproof path with spaces/"
+      - name: Action supports project paths with spaces
+        id: path-spaces
+        uses: ./
+        with:
+          path: ${{ runner.temp }}/releaseproof path with spaces
+          timeout: '10000'
+      - name: Validate outputs for project path with spaces
+        shell: bash
+        env:
+          STATUS: ${{ steps.path-spaces.outputs.status }}
+          REPORT: ${{ steps.path-spaces.outputs.html-report }}
+        run: |
+          test "$STATUS" = "READY"
+          test -f "$REPORT"
+
+      - name: Action fails closed on invalid project input
+        id: invalid-input
+        uses: ./
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/releaseproof-missing-project
+          timeout: '10000'
+      - name: Validate internal error policy
+        if: always()
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.invalid-input.outcome }}
+        run: test "$OUTCOME" = "failure"
+
   tarball-e2e:
     name: Bundled CLI Tarball E2E
     runs-on: ubuntu-latest

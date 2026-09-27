@@ -1,10 +1,15 @@
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import pc from 'picocolors';
+import { resolveArtifactDirectory } from './artifact-path.js';
 
-export async function handleClean(targetPath = '.'): Promise<void> {
-  const projectDir = path.resolve(targetPath);
-  const artifactsDir = path.join(projectDir, '.releaseproof');
+export async function handleClean(targetPath = '.', options: { outputDir?: string } = {}): Promise<void> {
+  let artifactsDir: string;
+  try { artifactsDir = await resolveArtifactDirectory(targetPath, options.outputDir); }
+  catch (err: unknown) {
+    console.error(pc.red(err instanceof Error ? err.message : String(err)));
+    process.exitCode = 3;
+    return;
+  }
 
   try {
     await fs.rm(artifactsDir, { recursive: true, force: true });
