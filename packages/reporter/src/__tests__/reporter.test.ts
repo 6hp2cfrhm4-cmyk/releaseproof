@@ -97,6 +97,7 @@ describe('reporters', () => {
     expect(md).toContain('# ReleaseProof Fix Task');
     expect(md).toContain('Build command failed with code 1');
     expect(md).toContain('releaseproof verify');
+    expect(md).toContain(`**Report ID**: ${mockReport.id}`);
   });
 
   it('keeps hostile project text and logs inside explicitly untrusted, non-terminable fences', () => {
@@ -123,6 +124,7 @@ describe('reporters', () => {
     const html = generateHtmlReport(mockReport);
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toContain('ReleaseProof Report — test-app');
+    expect(html).toContain(`Report ${mockReport.id}`);
     expect(html).toContain('copyForAi');
   });
 });

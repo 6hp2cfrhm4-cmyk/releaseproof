@@ -130,6 +130,10 @@ async function verifyThroughRenderer(page, project, expectedVerdict, expectedHea
   const report = JSON.parse(await fs.readFile(path.join(project, '.releaseproof', 'report.json'), 'utf8'));
   assert.equal(report.verdict, expectedVerdict);
   assert.equal(report.runStatus, 'completed');
+  const htmlReport = await fs.readFile(path.join(project, '.releaseproof', 'report.html'), 'utf8');
+  const aiHandoff = await fs.readFile(path.join(project, '.releaseproof', 'RELEASEPROOF_FIX.md'), 'utf8');
+  assert.ok(htmlReport.includes(`Report ${report.id}`), 'HTML report must identify the same verification run as report.json.');
+  assert.ok(aiHandoff.includes(`**Report ID**: ${report.id}`), 'AI handoff must identify the same verification run as report.json.');
   return report;
 }
 

@@ -1,14 +1,11 @@
 import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import pc from 'picocolors';
 import { verifyProject } from '@releaseproof/core';
 import { CheckCategorySchema, type CheckCategory } from '@releaseproof/schemas';
-import { allFixtures, cleanupFixtureArtifacts } from './setup-fixtures.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const fixturesRoot = path.resolve(__dirname, '..', 'fixtures');
+import { allFixtures, cleanupFixtureArtifacts, setupFixtures } from './setup-fixtures.js';
 
 interface FixtureExpected {
   expectedVerdict: 'READY' | 'NOT_READY' | 'INCOMPLETE';
@@ -126,6 +123,16 @@ interface BenchResult {
 }
 
 export async function runBenchmark(): Promise<void> {
+  const fixturesRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'releaseproof-benchmark-'));
+  try {
+    await setupFixtures(fixturesRoot);
+    await runBenchmarkAtRoot(fixturesRoot);
+  } finally {
+    await fs.rm(fixturesRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+}
+
+async function runBenchmarkAtRoot(fixturesRoot: string): Promise<void> {
   const mode = (process.env.RELEASEPROOF_BENCH_MODE || 'AUTHORITATIVE').toUpperCase();
   if (mode !== 'FAST' && mode !== 'AUTHORITATIVE') {
     throw new Error(`Unsupported RELEASEPROOF_BENCH_MODE: ${mode}`);
@@ -135,7 +142,7 @@ export async function runBenchmark(): Promise<void> {
   console.log(pc.bold('═══════════════════════════════════════════════════════════'));
   console.log(pc.bold('               RELEASEPROOF BENCHMARK SUITE                '));
   console.log(pc.bold('═══════════════════════════════════════════════════════════'));
-  console.log(pc.dim(`Running verification against test fixtures in: fixtures`));
+  console.log(pc.dim(`Running verification against generated fixtures in: ${fixturesRoot}`));
   console.log('');
 
   const entries = await fs.readdir(fixturesRoot, { withFileTypes: true });

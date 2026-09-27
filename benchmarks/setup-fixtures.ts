@@ -663,11 +663,11 @@ export const allFixtures: FixtureDefinition[] = [
   },
 ];
 
-export async function setupFixtures(): Promise<void> {
-  await fs.mkdir(fixturesRoot, { recursive: true });
+export async function setupFixtures(root = fixturesRoot): Promise<void> {
+  await fs.mkdir(root, { recursive: true });
 
   for (const fixture of allFixtures) {
-    const fixDir = path.join(fixturesRoot, fixture.name);
+    const fixDir = path.join(root, fixture.name);
     await fs.mkdir(fixDir, { recursive: true });
     await cleanupFixtureArtifacts(fixDir, Object.hasOwn(fixture.files, 'package-lock.json'));
 

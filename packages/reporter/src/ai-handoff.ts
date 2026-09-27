@@ -50,6 +50,8 @@ export function generateAiHandoffMarkdown(report: VerificationReport): string {
   lines.push('');
   lines.push(`**Status**: ${report.verdict}`);
   lines.push(`**Report schema**: ${report.schemaVersion ?? '1.x legacy reader'}`);
+  lines.push(`**Report ID**: ${report.id}`);
+  lines.push(`**Generated**: ${report.timestamp}`);
   appendUntrustedBlock(lines, 'Project name and path', `${report.projectName}\n${report.projectPath}`);
   lines.push(`**Score**: ${report.score} / 100`);
   lines.push(`**Evidence coverage**: ${Math.round(report.evidenceCoverage * 100)}%`);

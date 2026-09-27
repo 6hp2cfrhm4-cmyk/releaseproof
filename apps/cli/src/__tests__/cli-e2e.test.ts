@@ -40,10 +40,27 @@ http.createServer((req, res) => {
     expect(result.code, JSON.stringify(result)).toBe(0);
     const report = JSON.parse(result.stdout);
     expect(report.verdict).toBe('READY');
+    const artifactDir = path.join(root, '.releaseproof');
+    const diskReport = JSON.parse(await fs.readFile(path.join(artifactDir, 'report.json'), 'utf8'));
+    const htmlReport = await fs.readFile(path.join(artifactDir, 'report.html'), 'utf8');
+    const aiHandoff = await fs.readFile(path.join(artifactDir, 'RELEASEPROOF_FIX.md'), 'utf8');
+    expect(diskReport.id).toBe(report.id);
+    expect(htmlReport).toContain(`Report ${report.id}`);
+    expect(aiHandoff).toContain(`**Report ID**: ${report.id}`);
+    expect(aiHandoff).toContain(`**Status**: ${report.verdict}`);
     const processEvidence = report.checks.find((check: any) => check.id === 'startup-check').evidence.find((item: any) => item.type === 'process');
     expect(processEvidence.port).toBe(cliPort);
     expect(report.checks.find((check: any) => check.id === 'startup-check').summary).toContain('100ms');
-  }, 20000);
+
+    const repeated = await runCli(['verify', root, '--port', String(cliPort), '--timeout', '8000', '--json', '--skip-sandbox']);
+    expect(repeated.code, JSON.stringify(repeated)).toBe(0);
+    const repeatedReport = JSON.parse(repeated.stdout);
+    expect(repeatedReport.id).not.toBe(report.id);
+    const repeatedDiskReport = JSON.parse(await fs.readFile(path.join(artifactDir, 'report.json'), 'utf8'));
+    expect(repeatedDiskReport.id).toBe(repeatedReport.id);
+    expect(await fs.readFile(path.join(artifactDir, 'report.html'), 'utf8')).toContain(`Report ${repeatedReport.id}`);
+    expect(await fs.readFile(path.join(artifactDir, 'RELEASEPROOF_FIX.md'), 'utf8')).toContain(`**Report ID**: ${repeatedReport.id}`);
+  }, 35000);
 
   it('uses stable exit codes for incomplete, not-ready, and internal-error outcomes', async () => {
     const root = await createNodeFixture(roots, `require('node:http').createServer((_q,r)=>r.end('ok')).listen(Number(process.env.PORT),'127.0.0.1');`);

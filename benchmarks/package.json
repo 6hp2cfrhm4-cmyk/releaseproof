@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "setup-fixtures": "tsx setup-fixtures.ts",
-    "bench": "tsx setup-fixtures.ts && tsx run-bench.ts"
+    "bench": "tsx run-bench.ts"
   },
   "dependencies": {
     "@releaseproof/core": "workspace:*",
