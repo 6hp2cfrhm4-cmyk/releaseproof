@@ -160,8 +160,26 @@ try {
   await page.getByText('Copied sanitized handoff to clipboard.').waitFor({ timeout: 5000 });
   const copiedFinding = execFileSync('powershell.exe', ['-NoProfile', '-Command', 'Get-Clipboard -Raw'], { encoding: 'utf8' });
   assert.ok(copiedFinding.includes(findingTitle), 'Finding-specific AI handoff omitted the selected finding.');
+  const findingWithEvidence = page.locator('article.finding').filter({ hasText: /[1-9]\d* evidence item/ }).first();
+  await findingWithEvidence.click();
+  await page.getByRole('button', { name: 'Evidence', exact: true }).click();
+  await page.getByRole('heading', { name: 'Evidence' }).waitFor({ timeout: 5000 });
+  assert.ok((await page.locator('.evidence').count()) > 0, 'Evidence view did not render report evidence.');
+  await page.getByRole('button', { name: 'Logs', exact: true }).click();
+  await page.getByRole('heading', { name: 'Logs' }).waitFor({ timeout: 5000 });
+  assert.match(await page.locator('.log-box').innerText(), /finished|done|READY/i, 'Logs view did not retain the terminal run event.');
+  await page.getByRole('button', { name: 'Doctor', exact: true }).click();
+  await page.getByRole('heading', { name: 'System Doctor' }).waitFor({ timeout: 5000 });
+  await page.getByText('Choose a project first to inspect its detected runtime requirements.').waitFor({ timeout: 5000 });
   await page.getByRole('button', { name: 'Settings' }).click();
   await page.getByText('0.2.0-dev.0').waitFor({ timeout: 10000 });
+  const themeSelect = page.locator('.setting-row select').first();
+  await themeSelect.selectOption('light');
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+  await themeSelect.selectOption('dark');
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+  await themeSelect.selectOption('system');
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'system');
   await page.getByRole('button', { name: 'Overview' }).click();
   for (const artifact of ['report.json', 'report.html', 'RELEASEPROOF_FIX.md']) {
     await fs.access(path.join(projectPath, '.releaseproof', artifact));
