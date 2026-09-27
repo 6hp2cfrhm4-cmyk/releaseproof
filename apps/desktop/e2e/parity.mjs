@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fork, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -108,7 +109,10 @@ function runCli(projectPath) {
 
 function runDesktopWorker(projectPath) {
   return new Promise((resolve, reject) => {
-    const runId = `parity-${path.basename(projectPath)}`;
+    // Exercise the same validated IPC contract as the packaged Desktop. The
+    // worker protocol intentionally accepts only UUID run IDs, not arbitrary
+    // fixture labels.
+    const runId = randomUUID();
     const worker = fork(workerPath, [], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'], windowsHide: true });
     let stderr = '';
     worker.stderr?.on('data', (chunk) => { stderr += chunk; });
@@ -122,6 +126,6 @@ function runDesktopWorker(projectPath) {
         worker.once('exit', () => resolve(event.report));
       }
     });
-    worker.send({ runId, projectPath, timeoutMs: 12000, cleanWorkspace: true });
+    worker.send({ type: 'start', runId, projectPath, timeoutMs: 12000, cleanWorkspace: true });
   });
 }
