@@ -43,4 +43,11 @@ describe('secret redaction layer', () => {
     expect(redacted.tokens[0]).toContain('ghp_********************************');
     expect(redacted.user).toBe('alice');
   });
+
+  it('redacts explicitly supplied synthetic values even without a recognizable pattern', () => {
+    const value = 'synthetic-secret-value';
+    const redacted = redactObject({ stdout: `value=${value}`, nested: [value] }, [value]);
+    expect(JSON.stringify(redacted)).not.toContain(value);
+    expect(redacted.stdout).toContain('[REDACTED_EXPLICIT_VALUE]');
+  });
 });

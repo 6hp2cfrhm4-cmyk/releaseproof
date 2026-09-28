@@ -11,10 +11,27 @@ export interface FixtureDefinition {
   expected: {
     expectedVerdict: 'READY' | 'NOT_READY' | 'INCOMPLETE';
     expectedBlockerCategory?: string;
+    expectedBlockerCheckId?: string;
     expectedWarningCategory?: string;
     minBlockers?: number;
     minWarnings?: number;
   };
+}
+
+const GENERATED_FIXTURE_ENTRIES = [
+  '.releaseproof',
+  '.releaseproof-venv',
+  'node_modules',
+  '__pycache__',
+];
+
+export async function cleanupFixtureArtifacts(fixDir: string, keepPackageLock: boolean): Promise<void> {
+  for (const entry of GENERATED_FIXTURE_ENTRIES) {
+    await fs.rm(path.join(fixDir, entry), { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  }
+  if (!keepPackageLock) {
+    await fs.rm(path.join(fixDir, 'package-lock.json'), { force: true });
+  }
 }
 
 export const allFixtures: FixtureDefinition[] = [
@@ -312,7 +329,7 @@ export const allFixtures: FixtureDefinition[] = [
         scripts: { start: 'node -e "setInterval(()=>{}, 10000);"' },
       }),
     },
-    expected: { expectedVerdict: 'NOT_READY', expectedBlockerCategory: 'runtime', minBlockers: 1 },
+    expected: { expectedVerdict: 'INCOMPLETE', minBlockers: 0 },
   },
 
   // 21. Client secret exposed
@@ -646,12 +663,13 @@ export const allFixtures: FixtureDefinition[] = [
   },
 ];
 
-export async function setupFixtures(): Promise<void> {
-  await fs.mkdir(fixturesRoot, { recursive: true });
+export async function setupFixtures(root = fixturesRoot): Promise<void> {
+  await fs.mkdir(root, { recursive: true });
 
   for (const fixture of allFixtures) {
-    const fixDir = path.join(fixturesRoot, fixture.name);
+    const fixDir = path.join(root, fixture.name);
     await fs.mkdir(fixDir, { recursive: true });
+    await cleanupFixtureArtifacts(fixDir, Object.hasOwn(fixture.files, 'package-lock.json'));
 
     for (const [relPath, content] of Object.entries(fixture.files)) {
       const fullPath = path.join(fixDir, relPath);
@@ -660,7 +678,9 @@ export async function setupFixtures(): Promise<void> {
     }
 
     const expectedPath = path.join(fixDir, 'expected.json');
-    await fs.writeFile(expectedPath, JSON.stringify(fixture.expected, null, 2), 'utf-8');
+    const existingExpected = await fs.readFile(expectedPath, 'utf-8').catch(() => '');
+    const expectedNewline = existingExpected.endsWith('\r\n') ? '\r\n' : existingExpected.endsWith('\n') ? '\n' : '';
+    await fs.writeFile(expectedPath, `${JSON.stringify(fixture.expected, null, 2)}${expectedNewline}`, 'utf-8');
   }
 
   console.log(`✓ Successfully configured ${allFixtures.length} test fixtures in fixtures/`);

@@ -27,6 +27,7 @@ const SERVICE_RULES: PatternRule[] = [
       /connect ECONNREFUSED 127\.0\.0\.1:5432/i,
       /connection to server at ".*", port 5432 failed/i,
       /could not translate host name ".*" to address/i,
+      /Please provide required params for Postgres driver:[\s\S]{0,120}\[x\]\s*url:\s*''/i,
     ],
     reason: 'Application requires a reachable PostgreSQL database instance (port 5432) for startup or data queries.',
     remediation: 'Start a test PostgreSQL database (e.g. docker run -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres) or set a mock DATABASE_URL.',
@@ -164,4 +165,9 @@ export function detectExternalServiceDependency(logs: string): ExternalServiceIn
   }
 
   return null;
+}
+
+/** Recognizes framework validation that rejects absent user-supplied env values. */
+export function detectMissingRequiredEnvironment(logs: string): boolean {
+  return /Invalid environment variables:[\s\S]{0,3000}\b[A-Z][A-Z0-9_]*:\s*\[\s*['"]Required['"]\s*\]/i.test(logs);
 }

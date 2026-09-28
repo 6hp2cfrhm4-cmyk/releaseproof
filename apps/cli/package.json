@@ -1,6 +1,6 @@
 {
   "name": "releaseproof",
-  "version": "0.1.0",
+  "version": "0.2.0-dev.0",
   "description": "Your AI says it's done. ReleaseProof checks if it actually ships.",
   "type": "module",
   "bin": {

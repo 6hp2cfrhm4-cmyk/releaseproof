@@ -16,12 +16,29 @@ import { crawlViaHttp } from './http-crawler.js';
 export async function verifyBrowserApp(
   options: BrowserVerificationOptions
 ): Promise<BrowserVerificationResult> {
+  throwIfBrowserAborted(options.signal);
   await fs.mkdir(options.screenshotsDir, { recursive: true });
 
   let pageResults: PageCrawlResult[] = [];
   let usedPlaywright = false;
+  let capabilityStatus: BrowserVerificationResult['capabilityStatus'] = 'SKIPPED';
+  let capabilityReason: string | undefined;
+
+  if (options.requiresBrowserRuntime === false) {
+    pageResults = await crawlViaHttp(options);
+    const checks = buildBrowserChecks(pageResults, false, false);
+    return {
+      pagesVisited: pageResults.length,
+      results: pageResults,
+      checks,
+      evidence: buildEvidence(pageResults),
+      capabilityStatus: 'SKIPPED',
+      capabilityReason: 'API-only project: browser runtime verification is not applicable.',
+    };
+  }
 
   try {
+    if (options.forceHttpFallback) throw new Error('Playwright disabled for capability test');
     const pw: any = await import('playwright').catch(() => null);
     if (!pw || !pw.chromium) {
       throw new Error('Playwright module not available');
@@ -31,18 +48,38 @@ export async function verifyBrowserApp(
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
     usedPlaywright = true;
+    capabilityStatus = 'VERIFIED';
+    const closeOnAbort = () => { void browser.close(); };
+    options.signal?.addEventListener('abort', closeOnAbort, { once: true });
 
     try {
       pageResults = await runPlaywrightCrawl(browser, options);
     } finally {
+      options.signal?.removeEventListener('abort', closeOnAbort);
       await browser.close();
     }
   } catch (err: unknown) {
+    if (options.signal?.aborted || (err instanceof Error && err.name === 'AbortError')) throw err;
     // If Playwright fails to launch (e.g. browser binaries not installed), use HTTP fallback
     pageResults = await crawlViaHttp(options);
+    capabilityStatus = 'HTTP_FALLBACK';
+    capabilityReason = err instanceof Error ? err.message : String(err);
   }
 
-  const checks = buildBrowserChecks(pageResults, usedPlaywright);
+  const checks = buildBrowserChecks(pageResults, usedPlaywright, true);
+  if (!usedPlaywright) {
+    checks.push({
+      id: 'browser-runtime-unavailable',
+      title: 'Browser runtime verification unavailable',
+      category: 'browser',
+      status: 'unknown',
+      severity: 'medium',
+      classification: 'VERIFICATION_UNAVAILABLE',
+      summary: 'HTTP fallback completed, but it cannot verify client-side execution or delayed JavaScript errors.',
+      evidence: [],
+      metadata: { reason: capabilityReason },
+    });
+  }
   const evidence = buildEvidence(pageResults);
 
   return {
@@ -50,6 +87,8 @@ export async function verifyBrowserApp(
     results: pageResults,
     checks,
     evidence,
+    capabilityStatus,
+    capabilityReason,
   };
 }
 
@@ -76,6 +115,7 @@ async function runPlaywrightCrawl(
   const maxDepth = options.maxDepth ?? 3;
 
   for (let idx = 0; idx < queue.length && pageResults.length < maxPages; idx++) {
+    throwIfBrowserAborted(options.signal);
     const item = queue[idx];
     let normRoute = item.route.startsWith('/') ? item.route : `/${item.route}`;
     if (visited.has(normRoute)) continue;
@@ -126,6 +166,8 @@ async function runPlaywrightCrawl(
         waitUntil: 'domcontentloaded',
       });
       status = resp?.status() ?? 200;
+      await page.waitForTimeout(options.observationWindowMs ?? 2000);
+      throwIfBrowserAborted(options.signal);
       title = await page.title().catch(() => '');
 
       // Check DOM state
@@ -199,7 +241,14 @@ async function runPlaywrightCrawl(
   return pageResults;
 }
 
-function buildBrowserChecks(results: PageCrawlResult[], usedPlaywright: boolean): CheckResult[] {
+function throwIfBrowserAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  const cancelled = new Error('Browser verification was cancelled.');
+  cancelled.name = 'AbortError';
+  throw cancelled;
+}
+
+function buildBrowserChecks(results: PageCrawlResult[], usedPlaywright: boolean, browserApplication: boolean): CheckResult[] {
   const checks: CheckResult[] = [];
 
   const allPageErrors = results.filter((r) => r.pageErrors.length > 0);
@@ -210,11 +259,11 @@ function buildBrowserChecks(results: PageCrawlResult[], usedPlaywright: boolean)
       .map((f) => ({ pageUrl: r.url, ...f }))
   );
   const rootResult = results.find((r) => r.url === '/');
-  const blankPages = results.filter((r) => r.domState === 'blank');
-  const errorBoundaries = results.filter((r) => r.domState === 'error_boundary');
+  const blankPages = browserApplication ? results.filter((r) => r.domState === 'blank') : [];
+  const errorBoundaries = browserApplication ? results.filter((r) => r.domState === 'error_boundary') : [];
 
   // 1. Uncaught JS Exceptions -> Blocker
-  if (allPageErrors.length > 0) {
+  if (browserApplication && allPageErrors.length > 0) {
     const evidence: BrowserEvidence[] = allPageErrors.map((r) => ({
       type: 'browser',
       url: r.url,
@@ -230,6 +279,7 @@ function buildBrowserChecks(results: PageCrawlResult[], usedPlaywright: boolean)
       category: 'browser',
       status: 'block',
       severity: 'blocker',
+      classification: 'APPLICATION_FAILURE',
       summary: `Found uncaught JS exceptions on ${allPageErrors.length} route(s): ${allPageErrors.map((r) => r.url).join(', ')}.`,
       evidence,
       remediation: 'Inspect the stack traces and fix the runtime exception preventing client components from rendering.',
@@ -249,9 +299,10 @@ function buildBrowserChecks(results: PageCrawlResult[], usedPlaywright: boolean)
     checks.push({
       id: 'browser-server-500',
       title: 'HTTP 500 Internal Server Errors encountered',
-      category: 'browser',
+      category: browserApplication ? 'browser' : 'api',
       status: 'block',
       severity: 'blocker',
+      classification: 'APPLICATION_FAILURE',
       summary: `Encountered ${all500Requests.length} HTTP 500 error(s) during route exploration.`,
       evidence,
       remediation: 'Check server logs for the crashed handler and ensure required services or environment variables are available.',
@@ -259,13 +310,14 @@ function buildBrowserChecks(results: PageCrawlResult[], usedPlaywright: boolean)
   }
 
   // 3. Root route missing (404 on /) -> Blocker
-  if (rootResult && rootResult.status === 404) {
+  if (browserApplication && rootResult && rootResult.status === 404) {
     checks.push({
       id: 'browser-root-missing',
       title: 'Root route returned 404 Not Found',
-      category: 'browser',
+      category: browserApplication ? 'browser' : 'api',
       status: 'block',
       severity: 'blocker',
+      classification: 'APPLICATION_FAILURE',
       summary: 'The main index route (/) returned 404 Not Found. Application has no accessible landing or home view.',
       evidence: [
         {
@@ -288,6 +340,7 @@ function buildBrowserChecks(results: PageCrawlResult[], usedPlaywright: boolean)
       category: 'browser',
       status: 'block',
       severity: 'blocker',
+      classification: 'APPLICATION_FAILURE',
       summary: `Route(s) rendered completely blank with no DOM content: ${blankPages.map((r) => r.url).join(', ')}.`,
       evidence: blankPages.map((r) => ({
         type: 'browser',
@@ -309,6 +362,7 @@ function buildBrowserChecks(results: PageCrawlResult[], usedPlaywright: boolean)
       category: 'browser',
       status: 'block',
       severity: 'blocker',
+      classification: 'APPLICATION_FAILURE',
       summary: `Application rendered an error boundary on route(s): ${errorBoundaries.map((r) => r.url).join(', ')}.`,
       evidence: errorBoundaries.map((r) => ({
         type: 'browser',
@@ -330,7 +384,7 @@ function buildBrowserChecks(results: PageCrawlResult[], usedPlaywright: boolean)
     checks.push({
       id: 'browser-auth-boundary',
       title: 'Authentication boundary detected',
-      category: 'browser',
+      category: browserApplication ? 'browser' : 'api',
       status: 'pass',
       severity: 'info',
       summary: `Detected expected protected route authentication response (${authRequests.map((a) => a.url).join(', ')}).`,
@@ -348,7 +402,7 @@ function buildBrowserChecks(results: PageCrawlResult[], usedPlaywright: boolean)
   const asset404s = results.flatMap((r) =>
     r.failedRequests.filter((f) => f.status === 404 && f.url !== '/')
   );
-  if (asset404s.length > 0) {
+  if (browserApplication && asset404s.length > 0) {
     checks.push({
       id: 'browser-missing-assets',
       title: 'Non-critical assets returned 404',
@@ -368,7 +422,7 @@ function buildBrowserChecks(results: PageCrawlResult[], usedPlaywright: boolean)
   }
 
   // 8. Console errors (warning if not crashing page)
-  if (allConsoleErrors.length > 0 && allPageErrors.length === 0) {
+  if (browserApplication && allConsoleErrors.length > 0 && allPageErrors.length === 0) {
     checks.push({
       id: 'browser-console-errors',
       title: 'Console errors logged during execution',
@@ -389,14 +443,14 @@ function buildBrowserChecks(results: PageCrawlResult[], usedPlaywright: boolean)
 
   // 9. Healthy routes check
   const hasBlockers = checks.some((c) => c.status === 'block');
-  if (!hasBlockers && results.length > 0) {
+  if (!hasBlockers && results.length > 0 && (usedPlaywright || !browserApplication)) {
     checks.push({
       id: 'browser-routes-verified',
-      title: 'Browser route exploration passed',
-      category: 'browser',
+      title: browserApplication ? 'Browser route exploration passed' : 'HTTP API route verification passed',
+      category: browserApplication ? 'browser' : 'api',
       status: 'pass',
       severity: 'info',
-      summary: `Successfully verified ${results.length} route(s) with zero page crashes or server 500 errors (${usedPlaywright ? 'Playwright browser' : 'HTTP crawler'}).`,
+      summary: `Successfully verified ${results.length} route(s) with zero server 500 errors (${usedPlaywright ? 'Playwright browser' : 'HTTP crawler'}).`,
       evidence: results.map((r) => ({
         type: 'browser',
         url: r.url,

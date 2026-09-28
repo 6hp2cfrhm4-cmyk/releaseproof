@@ -1,77 +1,55 @@
 import pc from 'picocolors';
 import { execCommand } from '@releaseproof/runner';
+import { detectProject } from '@releaseproof/detector';
 
-export async function handleDoctor(): Promise<void> {
-  console.log('');
-  console.log(pc.bold('ReleaseProof System Doctor'));
-  console.log(pc.dim('Inspecting environment for production verification capabilities...'));
-  console.log('');
+export interface DoctorOptions { json?: boolean }
+export interface DoctorCapability {
+  id: string;
+  label: string;
+  required: boolean;
+  available: boolean;
+  version?: string;
+  remediation?: string;
+}
 
-  // 1. Node.js
-  const nodeVer = process.version;
-  const major = parseInt(nodeVer.slice(1).split('.')[0], 10);
-  const nodeOk = major >= 20;
-  console.log(
-    `  ${nodeOk ? pc.green('✓') : pc.yellow('!')} Node.js:        ${nodeVer} ${
-      nodeOk ? pc.dim('(Supported)') : pc.yellow('(Recommend Node 22+)')
-    }`
-  );
+export async function handleDoctor(targetPath = '.', options: DoctorOptions = {}): Promise<void> {
+  const profile = await detectProject(targetPath).catch(() => undefined);
+  const needsPython = profile?.languages.includes('python') ?? false;
+  const needsNode = Boolean(profile?.languages.some((language) => language === 'javascript' || language === 'typescript'));
+  const probes: Array<Promise<DoctorCapability>> = [Promise.resolve({
+    id: 'node', label: 'Node.js', required: needsNode, available: majorNodeVersion() >= 20,
+    version: process.version, remediation: 'Install Node.js 20 or 22 and retry.',
+  })];
+  probes.push(probe('npm', 'npm --version', needsNode, 'Install npm with Node.js.'));
+  if (needsNode && profile?.packageManagers.some((manager) => manager.type === 'pnpm')) probes.push(probe('pnpm', 'pnpm --version', true, 'Install the project-declared pnpm version or enable Corepack.'));
+  if (needsNode && profile?.packageManagers.some((manager) => manager.type === 'yarn')) probes.push(probe('yarn', 'yarn --version', true, 'Install the project-declared Yarn version or enable Corepack.'));
+  if (needsPython) probes.push(probe('python', 'python --version', true, 'Install a supported Python interpreter or pass --python-interpreter.'));
+  probes.push(probe('playwright', 'node -e "import(\'playwright\').then(()=>process.exit(0)).catch(()=>process.exit(1))"', Boolean(profile?.capabilities.browser), 'Install Playwright browser dependencies; HTTP fallback cannot prove client-side behavior.'));
 
-  // 2. npm
-  const npmRes = await execCommand('npm --version');
-  const npmOk = npmRes.exitCode === 0;
-  console.log(
-    `  ${npmOk ? pc.green('✓') : pc.red('✗')} npm:            ${
-      npmOk ? npmRes.stdout.trim() : pc.red('Not found')
-    }`
-  );
+  const capabilities = await Promise.all(probes);
+  const missingRequired = capabilities.filter((capability) => capability.required && !capability.available);
+  if (options.json) {
+    console.log(JSON.stringify({ target: targetPath, profile, capabilities, ready: missingRequired.length === 0 }));
+  } else {
+    console.log('');
+    console.log(pc.bold('ReleaseProof System Doctor'));
+    if (profile) console.log(pc.dim(`Target: ${profile.name} (${profile.frameworks.map((framework) => framework.name).join(', ') || 'unknown stack'})`));
+    for (const capability of capabilities) {
+      const mark = capability.available ? pc.green('✓') : capability.required ? pc.red('✗') : pc.dim('○');
+      console.log(`  ${mark} ${capability.label.padEnd(14)} ${capability.version ?? (capability.available ? 'available' : 'not available')}`);
+      if (!capability.available && capability.required && capability.remediation) console.log(pc.dim(`      ${capability.remediation}`));
+    }
+    console.log('');
+    console.log(missingRequired.length === 0 ? pc.green('Required verification capabilities are available.') : pc.yellow(`${missingRequired.length} required capability(ies) are unavailable.`));
+  }
+  process.exitCode = missingRequired.length === 0 ? 0 : 2;
+}
 
-  // 3. pnpm
-  const pnpmRes = await execCommand('pnpm --version');
-  const pnpmOk = pnpmRes.exitCode === 0;
-  console.log(
-    `  ${pnpmOk ? pc.green('✓') : pc.dim('○')} pnpm:           ${
-      pnpmOk ? pnpmRes.stdout.trim() : pc.dim('Not installed (optional)')
-    }`
-  );
+async function probe(id: string, command: string, required: boolean, remediation: string): Promise<DoctorCapability> {
+  const result = await execCommand(command, { timeoutMs: 5000 });
+  return { id, label: id, required, available: result.exitCode === 0, version: result.exitCode === 0 ? result.stdout.trim() || result.stderr.trim() : undefined, remediation };
+}
 
-  // 4. yarn
-  const yarnRes = await execCommand('yarn --version');
-  const yarnOk = yarnRes.exitCode === 0;
-  console.log(
-    `  ${yarnOk ? pc.green('✓') : pc.dim('○')} yarn:           ${
-      yarnOk ? yarnRes.stdout.trim() : pc.dim('Not installed (optional)')
-    }`
-  );
-
-  // 5. Python
-  const pyRes = await execCommand('python --version');
-  const pyOk = pyRes.exitCode === 0;
-  console.log(
-    `  ${pyOk ? pc.green('✓') : pc.dim('○')} Python:         ${
-      pyOk ? pyRes.stdout.trim() : pc.dim('Not installed (needed only for Python apps)')
-    }`
-  );
-
-  // 6. uv
-  const uvRes = await execCommand('uv --version');
-  const uvOk = uvRes.exitCode === 0;
-  console.log(
-    `  ${uvOk ? pc.green('✓') : pc.dim('○')} uv:             ${
-      uvOk ? uvRes.stdout.trim() : pc.dim('Not installed (optional)')
-    }`
-  );
-
-  // 7. Docker
-  const dockerRes = await execCommand('docker --version');
-  const dockerOk = dockerRes.exitCode === 0;
-  console.log(
-    `  ${dockerOk ? pc.green('✓') : pc.dim('○')} Docker:         ${
-      dockerOk ? dockerRes.stdout.trim() : pc.dim('Not available (local sandbox will be used)')
-    }`
-  );
-
-  console.log('');
-  console.log(pc.green('Environment is ready to run ReleaseProof.'));
-  console.log('');
+function majorNodeVersion(): number {
+  return Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10);
 }

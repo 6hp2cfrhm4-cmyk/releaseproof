@@ -18,6 +18,8 @@ export const CATEGORY_WEIGHTS: Record<CheckCategory, number> = {
 
 export interface ScoreComputationResult {
   score: number;
+  /** Fraction of required checks with an observed pass, warning, or blocker. */
+  evidenceCoverage: number;
   verdict: VerificationVerdict;
   categoryScores: Record<CheckCategory, CategoryScore>;
   counts: {
@@ -27,6 +29,7 @@ export interface ScoreComputationResult {
     blockers: number;
     unknown: number;
     skipped: number;
+    notApplicable: number;
   };
 }
 
@@ -36,63 +39,83 @@ export function computeScore(checks: CheckResult[]): ScoreComputationResult {
   let blockers = 0;
   let unknown = 0;
   let skipped = 0;
+  let notApplicable = 0;
+  let observedRequired = 0;
+  let applicableRequired = 0;
 
   for (const check of checks) {
-    if (check.severity === 'blocker' || check.status === 'block') {
+    if (check.status === 'block') {
       blockers++;
-    } else if (check.severity === 'high' || check.status === 'warn') {
-      warnings++;
+      observedRequired++;
+      applicableRequired++;
     } else if (check.status === 'pass') {
       passed++;
+      observedRequired++;
+      applicableRequired++;
+    } else if (check.status === 'warn') {
+      warnings++;
+      observedRequired++;
+      applicableRequired++;
     } else if (check.status === 'unknown') {
       unknown++;
+      applicableRequired++;
     } else if (check.status === 'skipped') {
       skipped++;
+      applicableRequired++;
+    } else if (check.status === 'not_applicable') {
+      notApplicable++;
     }
   }
 
   const categoryScores: Record<CheckCategory, CategoryScore> = {
-    install: { max: CATEGORY_WEIGHTS.install, score: CATEGORY_WEIGHTS.install, status: 'pass' },
-    build: { max: CATEGORY_WEIGHTS.build, score: CATEGORY_WEIGHTS.build, status: 'pass' },
-    runtime: { max: CATEGORY_WEIGHTS.runtime, score: CATEGORY_WEIGHTS.runtime, status: 'pass' },
-    browser: { max: CATEGORY_WEIGHTS.browser, score: CATEGORY_WEIGHTS.browser, status: 'pass' },
-    api: { max: CATEGORY_WEIGHTS.api, score: CATEGORY_WEIGHTS.api, status: 'pass' },
-    environment: { max: CATEGORY_WEIGHTS.environment, score: CATEGORY_WEIGHTS.environment, status: 'pass' },
-    documentation: { max: CATEGORY_WEIGHTS.documentation, score: CATEGORY_WEIGHTS.documentation, status: 'pass' },
-    security: { max: CATEGORY_WEIGHTS.security, score: CATEGORY_WEIGHTS.security, status: 'pass' },
+    install: { max: 0, score: 0, status: 'skipped' },
+    build: { max: 0, score: 0, status: 'skipped' },
+    runtime: { max: 0, score: 0, status: 'skipped' },
+    browser: { max: 0, score: 0, status: 'skipped' },
+    api: { max: 0, score: 0, status: 'skipped' },
+    environment: { max: 0, score: 0, status: 'skipped' },
+    documentation: { max: 0, score: 0, status: 'skipped' },
+    security: { max: 0, score: 0, status: 'skipped' },
   };
 
   for (const cat of Object.keys(CATEGORY_WEIGHTS) as CheckCategory[]) {
     const catChecks = checks.filter((c) => c.category === cat);
     if (catChecks.length === 0) continue;
 
-    const hasBlock = catChecks.some((c) => c.status === 'block' || c.severity === 'blocker');
-    const hasUnknown = catChecks.some((c) => c.status === 'unknown');
-    const hasWarn = catChecks.some((c) => c.status === 'warn' || c.severity === 'high');
-    const allSkipped = catChecks.every((c) => c.status === 'skipped');
-
-    if (hasBlock) {
-      categoryScores[cat].score = 0;
-      categoryScores[cat].status = 'fail';
-    } else if (hasUnknown) {
-      // Incomplete verification for this category: score is 50% max weight
-      categoryScores[cat].score = Math.round(CATEGORY_WEIGHTS[cat] * 0.5);
-      categoryScores[cat].status = 'unknown';
-    } else if (hasWarn) {
-      categoryScores[cat].score = Math.round(CATEGORY_WEIGHTS[cat] * 0.5);
-      categoryScores[cat].status = 'warn';
-    } else if (allSkipped) {
-      categoryScores[cat].status = 'skipped';
-    } else {
-      categoryScores[cat].score = CATEGORY_WEIGHTS[cat];
-      categoryScores[cat].status = 'pass';
+    const applicableChecks = catChecks.filter((c) => c.status !== 'not_applicable');
+    if (applicableChecks.length === 0) {
+      categoryScores[cat].status = 'not_applicable';
+      continue;
     }
+    categoryScores[cat].max = CATEGORY_WEIGHTS[cat];
+
+    const hasBlock = applicableChecks.some((c) => c.status === 'block');
+    const hasUnknown = applicableChecks.some((c) => c.status === 'unknown');
+    const hasSkipped = applicableChecks.some((c) => c.status === 'skipped');
+    const hasWarn = applicableChecks.some((c) => c.status === 'warn');
+    const credits = applicableChecks.map((check) => {
+      if (check.status === 'pass') return 1;
+      if (check.status === 'warn') return 0.5;
+      return 0;
+    });
+    categoryScores[cat].score = Math.round(
+      CATEGORY_WEIGHTS[cat] * credits.reduce<number>((sum, credit) => sum + credit, 0) / credits.length
+    );
+
+    if (hasBlock) categoryScores[cat].status = 'fail';
+    else if (hasUnknown) categoryScores[cat].status = 'unknown';
+    else if (hasSkipped) categoryScores[cat].status = 'skipped';
+    else if (hasWarn) categoryScores[cat].status = 'warn';
+    else categoryScores[cat].status = 'pass';
   }
 
-  let totalScore = 0;
+  let earnedScore = 0;
+  let applicableMax = 0;
   for (const cat of Object.keys(categoryScores) as CheckCategory[]) {
-    totalScore += categoryScores[cat].score;
+    earnedScore += categoryScores[cat].score;
+    applicableMax += categoryScores[cat].max;
   }
+  const totalScore = applicableMax > 0 ? Math.round((earnedScore / applicableMax) * 100) : 0;
 
   // Deterministic Verdict Policy:
   // 1. If any blocker exists -> NOT_READY (proven failure)
@@ -101,12 +124,13 @@ export function computeScore(checks: CheckResult[]): ScoreComputationResult {
   let verdict: VerificationVerdict = 'READY';
   if (blockers > 0) {
     verdict = 'NOT_READY';
-  } else if (unknown > 0) {
+  } else if (checks.length === 0 || unknown > 0 || skipped > 0 || passed + warnings === 0) {
     verdict = 'INCOMPLETE';
   }
 
   return {
     score: Math.min(100, Math.max(0, totalScore)),
+    evidenceCoverage: applicableRequired === 0 ? 0 : observedRequired / applicableRequired,
     verdict,
     categoryScores,
     counts: {
@@ -116,6 +140,7 @@ export function computeScore(checks: CheckResult[]): ScoreComputationResult {
       blockers,
       unknown,
       skipped,
+      notApplicable,
     },
   };
 }

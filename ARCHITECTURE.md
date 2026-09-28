@@ -50,8 +50,8 @@ graph TD
 - Sockets: TCP port listener checker and HTTP `/` health poller.
 
 ### 3. `packages/sandbox`
-- Creates ephemeral sandboxes (`rp-sandbox-<rand>`) in `os.tmpdir()`.
-- Recursive copy defensive filter: skips `node_modules`, `.next`, `dist`, `.venv`, `.env.local`.
+- Creates ephemeral clean verification workspaces (`releaseproof-<rand>`) in `os.tmpdir()`; this is not a hostile-code sandbox.
+- Recursive copy defensive filter skips dependencies, build artifacts, virtual environments, and secret-bearing `.env*` files while retaining `.env.example`.
 - Boundary containment: guards against path traversal (`..`), dropped symlinks resolving outside the root.
 
 ### 4. `packages/detector`
@@ -80,7 +80,7 @@ graph TD
 
 ### 7. `packages/browser`
 - Playwright Chromium headless route crawler.
-- Fallback to native HTTP crawler if browser binaries or headless display environments are unavailable.
+- Explicit browser capability status: `VERIFIED`, `HTTP_FALLBACK`, `UNAVAILABLE`, or `SKIPPED`. HTTP fallback does not earn browser-runtime PASS evidence.
 - Collects:
   - Unhandled exceptions (`pageerror`) → Blocker
   - HTTP 500 crashes → Blocker

@@ -1,12 +1,9 @@
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import pc from 'picocolors';
 import { verifyProject } from '@releaseproof/core';
-import {
-  formatTerminalReport,
-  generateAiHandoffMarkdown,
-  generateHtmlReport,
-} from '@releaseproof/reporter';
+import type { ReleaseProofPackageManager } from '@releaseproof/schemas';
+import { formatTerminalReport, publishReportArtifacts } from '@releaseproof/reporter';
+import { assertOutputDirectoryWritable, resolveArtifactDirectory } from './artifact-path.js';
 
 export interface VerifyCommandOptions {
   ci?: boolean;
@@ -14,9 +11,14 @@ export interface VerifyCommandOptions {
   verbose?: boolean;
   timeout?: string;
   port?: string;
+  pythonInterpreter?: string;
   skipSandbox?: boolean;
+  inPlace?: boolean;
+  target?: string;
+  browser?: boolean;
+  packageManager?: ReleaseProofPackageManager;
+  outputDir?: string;
 }
-
 export async function handleVerify(
   targetPath = '.',
   options: VerifyCommandOptions = {}
@@ -33,20 +35,40 @@ export async function handleVerify(
 
   const port = options.port ? parseInt(options.port, 10) : undefined;
   const timeoutMs = options.timeout ? parseInt(options.timeout, 10) : undefined;
+  const startConfig = {
+    ...(port !== undefined ? { port } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+  };
+  const cliConfig = {
+    ...(options.ci !== undefined ? { ci: options.ci } : {}),
+    ...(options.verbose !== undefined ? { verbose: options.verbose } : {}),
+    ...(Object.keys(startConfig).length > 0 ? { start: startConfig } : {}),
+    ...(options.pythonInterpreter ? { python: { interpreter: path.resolve(options.pythonInterpreter) } } : {}),
+    ...(options.target ? { target: options.target } : {}),
+    ...(options.packageManager ? { packageManager: options.packageManager } : {}),
+    ...(options.browser === false ? { checks: { browser: false }, browser: { enabled: false } } : {}),
+  };
 
   let currentStep = '';
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  process.once('SIGINT', cancel);
+  process.once('SIGTERM', cancel);
   try {
+    const artifactsDir = await resolveArtifactDirectory(projectDir, options.outputDir);
+    await assertOutputDirectoryWritable(artifactsDir, options.outputDir !== undefined);
+    if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535)) {
+      throw new Error(`Invalid --port value: ${options.port}`);
+    }
+    if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs < 1)) {
+      throw new Error(`Invalid --timeout value: ${options.timeout}`);
+    }
     const report = await verifyProject({
       projectDir,
-      skipSandbox: options.skipSandbox,
-      config: {
-        ci: options.ci,
-        verbose: options.verbose,
-        start: {
-          ...(port !== undefined ? { port } : {}),
-          ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-        },
-      },
+      outputDir: options.outputDir,
+      skipSandbox: options.inPlace || options.skipSandbox,
+      config: cliConfig,
+      signal: controller.signal,
       onProgress: (step, status, detail) => {
         if (options.json) return;
         if (status === 'running') {
@@ -59,20 +81,7 @@ export async function handleVerify(
         }
       },
     });
-
-    // Write HTML report
-    if (report.htmlReportPath) {
-      const html = generateHtmlReport(report);
-      const absHtml = path.resolve(process.cwd(), report.htmlReportPath);
-      await fs.writeFile(absHtml, html, 'utf-8');
-    }
-
-    // Write AI Fix Prompt
-    if (report.fixPromptPath) {
-      const prompt = generateAiHandoffMarkdown(report);
-      const absFix = path.resolve(process.cwd(), report.fixPromptPath);
-      await fs.writeFile(absFix, prompt, 'utf-8');
-    }
+    await publishReportArtifacts(report, artifactsDir);
 
     if (options.json) {
       console.log(JSON.stringify(report, null, 2));
@@ -80,8 +89,15 @@ export async function handleVerify(
       console.log(formatTerminalReport(report));
     }
 
-    if (report.verdict === 'NOT_READY') {
+    const internalError = report.checks.some((check) => check.classification === 'RELEASEPROOF_INTERNAL_ERROR');
+    if (report.runStatus === 'cancelled' || report.verdict === 'CANCELLED') {
+      process.exitCode = 130;
+    } else if (internalError || report.runStatus === 'internal_error') {
+      process.exitCode = 3;
+    } else if (report.verdict === 'NOT_READY') {
       process.exitCode = 1;
+    } else if (report.verdict === 'INCOMPLETE') {
+      process.exitCode = 2;
     } else {
       process.exitCode = 0;
     }
@@ -93,6 +109,9 @@ export async function handleVerify(
       console.error(pc.red(`ReleaseProof execution error during: ${currentStep}`));
       console.error(pc.red(err instanceof Error ? err.stack || err.message : String(err)));
     }
-    process.exitCode = 2;
+    process.exitCode = 3;
+  } finally {
+    process.off('SIGINT', cancel);
+    process.off('SIGTERM', cancel);
   }
 }

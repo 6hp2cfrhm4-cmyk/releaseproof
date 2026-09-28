@@ -17,13 +17,14 @@ export async function crawlViaHttp(
   const maxDepth = options.maxDepth ?? 3;
 
   while (queue.length > 0 && results.length < maxPages) {
+    throwIfAborted(options.signal);
     const item = queue.shift()!;
     let normRoute = item.route.startsWith('/') ? item.route : `/${item.route}`;
     if (visited.has(normRoute)) continue;
     visited.add(normRoute);
 
     const fullUrl = new URL(normRoute, options.baseUrl).toString();
-    const crawlRes = await fetchPageHttp(fullUrl, options.timeoutMs ?? 10000);
+    const crawlRes = await fetchPageHttp(fullUrl, options.timeoutMs ?? 10000, options.signal);
     results.push(crawlRes);
 
     if (item.depth < maxDepth && crawlRes.discoveredLinks.length > 0) {
@@ -38,8 +39,8 @@ export async function crawlViaHttp(
   return results;
 }
 
-function fetchPageHttp(targetUrl: string, timeoutMs: number): Promise<PageCrawlResult> {
-  return new Promise((resolve) => {
+function fetchPageHttp(targetUrl: string, timeoutMs: number, signal?: AbortSignal): Promise<PageCrawlResult> {
+  return new Promise((resolve, reject) => {
     const parsed = new URL(targetUrl);
 
     const req = http.request(
@@ -48,8 +49,9 @@ function fetchPageHttp(targetUrl: string, timeoutMs: number): Promise<PageCrawlR
         port: parsed.port || 80,
         path: parsed.pathname + parsed.search,
         method: 'GET',
+        signal,
         headers: {
-          'User-Agent': 'ReleaseProof-Crawler/0.1.0',
+          'User-Agent': 'ReleaseProof-Crawler/0.2.0-dev.0',
           Accept: 'text/html,application/xhtml+xml,application/json,*/*',
         },
         timeout: timeoutMs,
@@ -77,7 +79,7 @@ function fetchPageHttp(targetUrl: string, timeoutMs: number): Promise<PageCrawlR
           }
 
           // Check if body looks like error page
-          const isBlank = body.trim().length === 0;
+          const isBlank = status !== 204 && body.trim().length === 0;
           const isErrorBoundary = /Internal Server Error|Application Error|Unhandled Runtime Error/i.test(body);
 
           const domState = isBlank
@@ -135,6 +137,12 @@ function fetchPageHttp(targetUrl: string, timeoutMs: number): Promise<PageCrawlR
     });
 
     req.on('error', (err) => {
+      if (signal?.aborted) {
+        const cancelled = new Error('Browser HTTP verification was cancelled.');
+        cancelled.name = 'AbortError';
+        reject(cancelled);
+        return;
+      }
       resolve({
         url: parsed.pathname,
         status: 0,
@@ -148,4 +156,11 @@ function fetchPageHttp(targetUrl: string, timeoutMs: number): Promise<PageCrawlR
 
     req.end();
   });
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  const cancelled = new Error('Browser HTTP verification was cancelled.');
+  cancelled.name = 'AbortError';
+  throw cancelled;
 }

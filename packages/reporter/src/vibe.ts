@@ -50,6 +50,8 @@ export function formatVibeCheckCard(report: VerificationReport): string {
   const verdictBanner =
     report.verdict === 'READY'
       ? pc.bold(pc.green('READY TO SHIP'))
+      : report.verdict === 'CANCELLED'
+        ? pc.bold(pc.dim('VERIFICATION CANCELLED — NO SHIPPING VERDICT'))
       : pc.bold(pc.red('NOT READY TO SHIP'));
 
   lines.push('│' + center(verdictBanner, width) + '│');

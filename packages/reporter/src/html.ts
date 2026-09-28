@@ -10,7 +10,7 @@ function serializeSafeJson(obj: unknown): string {
 }
 
 export function generateHtmlReport(report: VerificationReport): string {
-  const isReady = report.verdict === 'READY';
+  const verdictColor = report.verdict === 'READY' ? 'var(--green)' : report.verdict === 'INCOMPLETE' || report.verdict === 'CANCELLED' ? 'var(--yellow)' : 'var(--red)';
   const aiMarkdown = generateAiHandoffMarkdown(report);
   const jsonReportSafe = serializeSafeJson(report);
   const aiMarkdownSafe = serializeSafeJson(aiMarkdown);
@@ -112,7 +112,7 @@ export function generateHtmlReport(report: VerificationReport): string {
     .verdict-title {
       font-size: 1.75rem;
       font-weight: 800;
-      color: ${isReady ? 'var(--green)' : 'var(--red)'};
+      color: ${verdictColor};
     }
     .verdict-subtitle {
       color: var(--text);
@@ -283,22 +283,22 @@ export function generateHtmlReport(report: VerificationReport): string {
     <header>
       <div>
         <div class="brand">Release<span>Proof</span></div>
-        <div class="meta">${escapeHtml(report.projectName)} &bull; ${new Date(report.timestamp).toLocaleString()} &bull; ${(report.durationMs / 1000).toFixed(1)}s</div>
+        <div class="meta">${escapeHtml(report.projectName)} &bull; Report ${escapeHtml(report.id)} &bull; ${escapeHtml(new Date(report.timestamp).toISOString())} UTC &bull; ${(report.durationMs / 1000).toFixed(1)}s</div>
       </div>
       <div>
         <button class="btn btn-primary" onclick="copyForAi()">Copy for AI</button>
       </div>
     </header>
 
-    <div class="verdict-banner ${report.verdict === 'READY' ? 'ready' : report.verdict === 'INCOMPLETE' ? 'incomplete' : 'not-ready'}">
+    <div class="verdict-banner ${report.verdict === 'READY' ? 'ready' : report.verdict === 'INCOMPLETE' ? 'incomplete' : report.verdict === 'CANCELLED' ? 'incomplete' : 'not-ready'}">
       <div>
-        <div class="verdict-title">${report.verdict === 'READY' ? 'READY TO SHIP' : report.verdict === 'INCOMPLETE' ? 'VERIFICATION INCOMPLETE' : 'NOT READY TO SHIP'}</div>
+        <div class="verdict-title">${report.verdict === 'READY' ? 'READY TO SHIP' : report.verdict === 'INCOMPLETE' ? 'VERIFICATION INCOMPLETE' : report.verdict === 'CANCELLED' ? 'VERIFICATION CANCELLED' : 'NOT READY TO SHIP'}</div>
         <div class="verdict-subtitle">
-          ${report.counts.blockers} Blocker(s) &bull; ${report.counts.warnings} Warning(s) &bull; ${report.counts.unknown || 0} External Dependency(ies) &bull; ${report.counts.passed} Passed
+          ${report.runStatus === 'cancelled' ? 'No shipping verdict was produced.' : `${report.counts.blockers} Blocker(s) &bull; ${report.counts.warnings} Warning(s) &bull; ${report.counts.unknown || 0} Incomplete Check(s) &bull; ${report.counts.passed} Passed`} &bull; ${Math.round(report.evidenceCoverage * 100)}% evidence coverage
         </div>
       </div>
       <div>
-        <div class="score-badge" style="color: ${report.verdict === 'READY' ? 'var(--green)' : report.verdict === 'INCOMPLETE' ? 'var(--yellow)' : 'var(--red)'}">${report.score}</div>
+        <div class="score-badge" style="color: ${report.verdict === 'READY' ? 'var(--green)' : report.verdict === 'INCOMPLETE' || report.verdict === 'CANCELLED' ? 'var(--yellow)' : 'var(--red)'}">${report.score}</div>
         <div class="score-label">Release Score / 100</div>
       </div>
     </div>

@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
+import * as http from 'node:http';
 import { verifyProject } from '../engine.js';
 
 describe('clean-room isolation in verification pipeline', () => {
@@ -56,11 +57,18 @@ server.listen(3000);
     );
 
     // Run verification through clean-room sandbox (skipSandbox: false)
+    const probe = http.createServer();
+    await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    const address = probe.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+
     const report = await verifyProject({
       projectDir: dirtyDir,
       skipSandbox: false,
       config: {
         start: {
+          port,
           timeoutMs: 3000,
         },
       },

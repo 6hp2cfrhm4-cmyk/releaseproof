@@ -1,0 +1,21 @@
+appId: dev.releaseproof.desktop
+productName: ReleaseProof
+artifactName: ReleaseProof-Setup-${version}.${ext}
+directories:
+  output: release
+icon: assets/icon.svg
+files:
+  - dist/**
+  - package.json
+asar: true
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: false
+  createStartMenuShortcut: true
+  shortcutName: ReleaseProof
+  runAfterFinish: false

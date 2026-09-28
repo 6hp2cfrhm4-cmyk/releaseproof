@@ -70,6 +70,19 @@ export async function analyzeFrameworks(
     test?: string;
   } = {};
 
+  const nodeInstallCommand = () => {
+    if (packageManager.type === 'npm') {
+      return packageManager.lockfile ? 'npm ci' : 'npm install';
+    }
+    if (packageManager.type === 'pnpm') {
+      return packageManager.lockfile ? 'pnpm install --frozen-lockfile' : 'pnpm install';
+    }
+    if (packageManager.type === 'yarn') {
+      return packageManager.lockfile ? 'yarn install --frozen-lockfile' : 'yarn install';
+    }
+    return `${packageManager.type} install`;
+  };
+
   if (pkgJson) {
     languages.add('javascript');
     if (await checkExists('tsconfig.json') || await checkExists('src/index.ts')) {
@@ -100,7 +113,7 @@ export async function analyzeFrameworks(
         hasApi = true;
       }
 
-      commands.install = `${pm} install`;
+      commands.install = nodeInstallCommand();
       commands.dev = `${runPrefix} dev`;
       commands.build = pkgJson.scripts?.build ? `${runPrefix} build` : `${pm === 'npm' ? 'npx' : pm} next build`;
       commands.start = pkgJson.scripts?.start ? `${runPrefix} start` : `${pm === 'npm' ? 'npx' : pm} next start`;
@@ -114,12 +127,33 @@ export async function analyzeFrameworks(
         confidence: 1.0,
       });
       hasBrowser = true;
-      ports.add(5173);
+      const previewScript = pkgJson.scripts?.preview;
+      const isNativeVitePreview = Boolean(previewScript && /(?:^|\s|&&)vite\s+preview(?:\s|$)/.test(previewScript));
+      // Native Vite preview accepts the host/port flags. A custom preview script is
+      // an application-owned command: do not append CLI flags that may be consumed
+      // by node (or another runtime) and cause a false startup blocker.
+      if (isNativeVitePreview || (!previewScript && !pkgJson.scripts?.start)) {
+        // `vite preview` serves production output on 4173 by default; 5173 is the dev server.
+        ports.add(4173);
+      } else if (previewScript) {
+        // A custom preview command may not expose Vite's flags. Keep the conventional
+        // Vite preview probe as the first candidate; explicit listen/port declarations
+        // discovered below are still retained as additional candidates.
+        ports.add(5173);
+      }
 
-      commands.install = `${pm} install`;
+      commands.install = nodeInstallCommand();
       commands.dev = `${runPrefix} dev`;
       commands.build = pkgJson.scripts?.build ? `${runPrefix} build` : `${pm === 'npm' ? 'npx' : pm} vite build`;
-      commands.start = pkgJson.scripts?.preview ? `${runPrefix} preview` : (pkgJson.scripts?.start ? `${runPrefix} start` : `${pm === 'npm' ? 'npx' : pm} vite preview`);
+      commands.start = previewScript
+        ? (isNativeVitePreview
+          ? (pm === 'npm'
+            ? 'npm run preview -- --host 127.0.0.1 --port 4173'
+            : `${runPrefix} preview --host 127.0.0.1 --port 4173`)
+          : `${runPrefix} preview`)
+        : (pkgJson.scripts?.start
+          ? `${runPrefix} start`
+          : `${pm === 'npm' ? 'npx' : pm} vite preview --host 127.0.0.1 --port 4173`);
     }
     // Detect Express
     else if ('express' in allDeps) {
@@ -130,9 +164,7 @@ export async function analyzeFrameworks(
         confidence: 1.0,
       });
       hasApi = true;
-      ports.add(3000);
-
-      commands.install = `${pm} install`;
+      commands.install = nodeInstallCommand();
       commands.dev = pkgJson.scripts?.dev ? `${runPrefix} dev` : undefined;
       commands.build = pkgJson.scripts?.build ? `${runPrefix} build` : undefined;
       commands.start = pkgJson.scripts?.start ? `${runPrefix} start` : undefined;
@@ -147,7 +179,7 @@ export async function analyzeFrameworks(
       if (pkgJson.scripts?.build) commands.build = `${runPrefix} build`;
       if (pkgJson.scripts?.start) commands.start = `${runPrefix} start`;
       if (pkgJson.scripts?.dev) commands.dev = `${runPrefix} dev`;
-      commands.install = `${pm} install`;
+      commands.install = nodeInstallCommand();
     }
 
     if (pkgJson.scripts?.test) {
@@ -161,12 +193,36 @@ export async function analyzeFrameworks(
         ports.add(parseInt(match[1], 10));
       }
     }
+
+    // Common Express entrypoints declare a fallback port in source while their
+    // package script only says `node app.js`. Use that declared default instead
+    // of inventing port 3000, which also avoids a false README mismatch.
+    if (frameworks.some((framework) => framework.type === 'express') && ports.size === 0) {
+      for (const candidate of ['app.js', 'server.js', 'index.js', 'src/server.js', 'src/index.js']) {
+        try {
+          const source = await fs.readFile(path.join(projectDir, candidate), 'utf8');
+          const match = /process\.env\.PORT\s*\|\|\s*(?:process\.env\.[A-Z_][A-Z_0-9]*\s*\|\|\s*)?(\d{2,5})/i.exec(source);
+          if (match) {
+            ports.add(Number(match[1]));
+            break;
+          }
+        } catch {}
+      }
+    }
   }
 
   // Check Python (FastAPI / generic)
   const hasRequirements = await checkExists('requirements.txt');
   const hasPyproject = await checkExists('pyproject.toml');
+  const hasUvLock = await checkExists('uv.lock');
   const hasMainPy = await checkExists('main.py') || await checkExists('app/main.py');
+  const pythonInstallCommand = () => packageManager.type === 'uv'
+    ? hasUvLock
+      ? 'uv sync --locked --active'
+      : hasRequirements
+        ? 'uv pip install -r requirements.txt'
+        : 'uv sync --active'
+    : hasRequirements ? 'python -m pip install -r requirements.txt' : 'python -m pip install .';
 
   if (hasRequirements || hasPyproject || hasMainPy) {
     languages.add('python');
@@ -214,8 +270,7 @@ export async function analyzeFrameworks(
       hasApi = true;
       ports.add(8000);
 
-      const isUv = packageManager.type === 'uv';
-      commands.install = isUv ? 'uv pip install -r requirements.txt' : 'pip install -r requirements.txt';
+      commands.install = pythonInstallCommand();
       commands.dev = 'python -m uvicorn main:app --reload --port 8000';
       commands.start = 'python -m uvicorn main:app --host 127.0.0.1 --port 8000';
     } else if (languages.has('python') && frameworks.length === 0) {
@@ -224,7 +279,7 @@ export async function analyzeFrameworks(
         name: 'Generic Python',
         confidence: 0.7,
       });
-      commands.install = packageManager.type === 'uv' ? 'uv pip install -r requirements.txt' : 'pip install -r requirements.txt';
+      commands.install = pythonInstallCommand();
     }
   }
 

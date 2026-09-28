@@ -10,6 +10,7 @@ export interface CleanWorkspace {
   originalPath: string;
   fileCount: number;
   dispose: () => Promise<void>;
+  cleanupError: () => Error | undefined;
 }
 
 /**
@@ -24,17 +25,24 @@ export async function createCleanWorkspace(
   const tempDir = path.join(os.tmpdir(), `releaseproof-${id}`);
 
   await fs.mkdir(tempDir, { recursive: true });
-
-  const { copiedFilesCount } = await copyWorkspaceClean(originalPath, tempDir, options);
+  let copiedFilesCount = 0;
+  try {
+    ({ copiedFilesCount } = await copyWorkspaceClean(originalPath, tempDir, options));
+  } catch (error: unknown) {
+    await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }).catch(() => {});
+    throw error;
+  }
 
   let disposed = false;
+  let lastCleanupError: Error | undefined;
   const dispose = async () => {
     if (disposed) return;
     disposed = true;
     try {
       await fs.rm(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
-    } catch {
-      // Ignore cleanup error on exit
+    } catch (error: unknown) {
+      lastCleanupError = error instanceof Error ? error : new Error(String(error));
+      throw new Error(`Failed to remove temporary verification workspace ${tempDir}: ${lastCleanupError.message}`);
     }
   };
 
@@ -44,5 +52,6 @@ export async function createCleanWorkspace(
     originalPath,
     fileCount: copiedFilesCount,
     dispose,
+    cleanupError: () => lastCleanupError,
   };
 }

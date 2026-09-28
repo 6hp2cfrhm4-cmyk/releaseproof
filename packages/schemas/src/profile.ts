@@ -55,6 +55,23 @@ export const EnvironmentVariableInfoSchema = z.object({
 });
 export type EnvironmentVariableInfo = z.infer<typeof EnvironmentVariableInfoSchema>;
 
+export const ProjectTargetCandidateSchema = z.object({
+  /** Relative to the selected project root; `.` denotes the root target. */
+  path: z.string(),
+  name: z.string(),
+  kind: z.enum(['node', 'python', 'mixed', 'unknown']),
+  confidence: z.number().min(0).max(1),
+  frameworks: z.array(FrameworkDetectionSchema).default([]),
+  commands: z.object({
+    install: z.string().optional(),
+    build: z.string().optional(),
+    start: z.string().optional(),
+  }).default({}),
+  runnable: z.boolean().default(false),
+  reasons: z.array(z.string()).default([]),
+});
+export type ProjectTargetCandidate = z.infer<typeof ProjectTargetCandidateSchema>;
+
 export const ProjectProfileSchema = z.object({
   root: z.string(),
   name: z.string().default('project'),
@@ -77,5 +94,7 @@ export const ProjectProfileSchema = z.object({
     docker: z.boolean().default(false),
   }).default({ browser: false, api: false, docker: false }),
   entrypoints: z.array(z.string()).default([]),
+  /** Candidate runnable targets discovered below the selected root. */
+  targetCandidates: z.array(ProjectTargetCandidateSchema).default([]),
 });
 export type ProjectProfile = z.infer<typeof ProjectProfileSchema>;

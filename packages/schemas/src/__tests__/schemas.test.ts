@@ -93,12 +93,57 @@ describe('schemas', () => {
         blockers: 2,
         unknown: 0,
         skipped: 0,
+        notApplicable: 0,
       },
+      browserVerification: { status: 'VERIFIED' },
       checks: [],
       durationMs: 4500,
       artifactsDir: '/app/.releaseproof',
     });
 
     expect(report.verdict).toBe('NOT_READY');
+    expect(report.runStatus).toBe('completed');
+    expect(report.evidenceCoverage).toBe(0);
+  });
+
+  it('requires cancelled reports to have no shipping verdict and zero score', () => {
+    const report = VerificationReportSchema.parse({
+      id: 'cancelled-report', version: '0.2.0-dev.0', runStatus: 'cancelled',
+      timestamp: new Date().toISOString(), projectName: 'app', projectPath: '.',
+      profile: { root: '.', name: 'app' }, verdict: 'CANCELLED', score: 0,
+      categoryScores: {}, counts: { total: 0, passed: 0, warnings: 0, blockers: 0, unknown: 0, skipped: 0, notApplicable: 0 },
+      checks: [], durationMs: 10, artifactsDir: '.releaseproof',
+    });
+    expect(report.verdict).toBe('CANCELLED');
+    expect(report.runStatus).toBe('cancelled');
+
+    expect(() => VerificationReportSchema.parse({ ...report, verdict: 'READY' })).toThrow();
+  });
+
+  it('does not allow READY to hide skipped or incomplete evidence', () => {
+    expect(() => VerificationReportSchema.parse({
+      id: 'incomplete-ready', version: '1.0.0', timestamp: new Date().toISOString(),
+      projectName: 'app', projectPath: '.', profile: { root: '.', name: 'app' },
+      verdict: 'READY', score: 100, evidenceCoverage: 0.5,
+      categoryScores: {}, counts: { total: 1, passed: 0, warnings: 0, blockers: 0, unknown: 1, skipped: 0, notApplicable: 0 },
+      checks: [{ id: 'browser', title: 'Browser', category: 'browser', status: 'unknown', severity: 'high', summary: 'Unavailable', evidence: [] }],
+      durationMs: 1, artifactsDir: '.releaseproof',
+    })).toThrow(/unknown\/skipped|complete evidence/);
+  });
+
+  it('accepts legacy and same-major reports but rejects unsupported schema majors', () => {
+    const legacy = {
+      id: 'versioned-report', version: '0.2.0-dev.0', timestamp: new Date().toISOString(),
+      projectName: 'app', projectPath: '.', profile: { root: '.', name: 'app' },
+      verdict: 'INCOMPLETE', score: 0, categoryScores: {},
+      counts: { total: 0, passed: 0, warnings: 0, blockers: 0, unknown: 0, skipped: 0, notApplicable: 0 },
+      checks: [], durationMs: 1, artifactsDir: '.releaseproof',
+    };
+    expect(VerificationReportSchema.parse(legacy).schemaVersion).toBeUndefined();
+    expect(VerificationReportSchema.parse({ ...legacy, schemaVersion: '1.3.0' }).schemaVersion).toBe('1.3.0');
+    expect(() => VerificationReportSchema.parse({ ...legacy, schemaVersion: '2.0.0' }))
+      .toThrow(/Unsupported report schema major version 2; upgrade ReleaseProof/);
+    expect(() => VerificationReportSchema.parse({ ...legacy, schemaVersion: 'not-semver' }))
+      .toThrow(/semantic version/);
   });
 });

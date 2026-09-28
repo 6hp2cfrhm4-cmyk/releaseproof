@@ -4,7 +4,8 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
+| 0.1.x   | Historical; superseded by current hardening work |
+| 0.2.x   | Development / pending independent re-audit |
 
 ---
 
@@ -12,8 +13,8 @@
 
 ReleaseProof executes foreign code, build commands, and web servers during verification. Because of this, security and process isolation are core design requirements:
 
-1. **Clean-Room Sandbox Isolation**:
-   - Verification runs in an ephemeral temporary directory (`rp-sandbox-*`).
+1. **Isolated Clean Verification Workspace**:
+   - Verification runs in an ephemeral copied directory. This removes local build/dependency contamination but is not an OS security sandbox.
    - Copy operations strictly enforce directory boundaries to prevent path traversal attacks (`..`).
    - Symlinks pointing outside the workspace root are automatically dropped.
 
@@ -25,6 +26,7 @@ ReleaseProof executes foreign code, build commands, and web servers during verif
 3. **Centralized Secret Redaction Layer**:
    - Any secret, API key, AWS token, private key, or password matched by our pattern rules is masked (e.g. `AKIA****************`) before being written to stdout, JSON, HTML reports, or AI prompts.
    - Raw credentials are never transmitted over any network socket.
+   - Child processes receive a minimal host environment. Values explicitly allowed or provided are registered for value-based redaction at report boundaries.
 
 4. **XSS-Safe HTML Serialization**:
    - The standalone offline HTML report serializes report data with standard HTML escaping (`<` → `\u003c`, `>` → `\u003e`, `&` → `\u0026`) and uses `textContent` DOM nodes to prevent XSS execution.

@@ -37,6 +37,9 @@ describe('clean-room isolation hardening', () => {
     await fs.writeFile(path.join(dirtyDir, 'dist', 'bundle.js'), 'console.log("prebuilt stale bundle");');
     await fs.writeFile(path.join(dirtyDir, '.next', 'stale.json'), '{}');
     await fs.writeFile(path.join(dirtyDir, '.env.local'), 'SECRET_HOST_TOKEN=12345');
+    await fs.writeFile(path.join(dirtyDir, '.env'), 'BASE_SECRET=12345');
+    await fs.writeFile(path.join(dirtyDir, '.env.production'), 'PRODUCTION_SECRET=12345');
+    await fs.writeFile(path.join(dirtyDir, '.env.example'), 'SAFE_TEMPLATE=replace-me');
     await fs.writeFile(path.join(dirtyDir, '.env.production.local'), 'PROD_TOKEN=secret');
 
     // Create clean-room sandbox
@@ -56,7 +59,10 @@ describe('clean-room isolation hardening', () => {
       expect(await fileExists(path.join(workspace.path, '.venv'))).toBe(false);
       expect(await fileExists(path.join(workspace.path, '.turbo'))).toBe(false);
       expect(await fileExists(path.join(workspace.path, '.env.local'))).toBe(false);
+      expect(await fileExists(path.join(workspace.path, '.env'))).toBe(false);
+      expect(await fileExists(path.join(workspace.path, '.env.production'))).toBe(false);
       expect(await fileExists(path.join(workspace.path, '.env.production.local'))).toBe(false);
+      expect(await fileExists(path.join(workspace.path, '.env.example'))).toBe(true);
     } finally {
       await workspace.dispose();
     }

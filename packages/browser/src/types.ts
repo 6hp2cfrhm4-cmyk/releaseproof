@@ -1,4 +1,4 @@
-import { CheckResult, BrowserEvidence, ScreenshotEvidence, HttpEvidence } from '@releaseproof/schemas';
+import { CheckResult, BrowserEvidence, ScreenshotEvidence, HttpEvidence, BrowserVerificationStatus } from '@releaseproof/schemas';
 
 export interface PageCrawlResult {
   url: string;
@@ -21,6 +21,10 @@ export interface BrowserVerificationOptions {
   screenshotsDir: string;
   ignorePatterns?: string[];
   headless?: boolean;
+  observationWindowMs?: number;
+  requiresBrowserRuntime?: boolean;
+  forceHttpFallback?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface BrowserVerificationResult {
@@ -28,4 +32,6 @@ export interface BrowserVerificationResult {
   results: PageCrawlResult[];
   checks: CheckResult[];
   evidence: (BrowserEvidence | ScreenshotEvidence | HttpEvidence)[];
+  capabilityStatus: BrowserVerificationStatus;
+  capabilityReason?: string;
 }
