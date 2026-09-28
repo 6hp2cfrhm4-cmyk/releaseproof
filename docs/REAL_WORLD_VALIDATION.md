@@ -1,13 +1,13 @@
 # Real-World Open Source Repository Validation
 
-> **Revalidation date:** 2026-09-27
-> **ReleaseProof under test:** unreleased `0.2.0-dev.0`, source `2357e457d7a2f1a1337c42b18277e525511206a6`
-> **Environment:** Windows 11 Home 10.0.26200 x64, Node v24.19.0, Python 3.12.14. Compatible managers were used where required by the lockfile: pnpm 8.15.9 (taxonomy), pnpm 9.15.9 (leerob/site), pnpm 10.7.1 (vite-plugin-inspect), pnpm 12.3.4 (vitesse-lite); npm for npm-lockfile projects.
+> **Revalidation date:** 2026-09-28
+> **ReleaseProof under test:** unreleased `0.2.0-dev.0`, source `a3524f56c69982ead3b0901aeed638c3ac9171dd`
+> **Environment:** Windows 11 Home 10.0.26200 x64, Node v24.19.0, bundled CPython 3.12.14. Compatible managers were used where required by the lockfile: pnpm 8.15.9 (taxonomy), pnpm 9.15.9 (leerob/site), pnpm 10.7.1 (vite-plugin-inspect), pnpm 12.3.4 (vitesse-lite); npm for npm-lockfile projects.
 > **Method:** clean-workspace verification of ten public repositories at exact pinned SHAs; no upstream changes. Reports were inspected for target, capability, checks and evidence. These outcomes are environment-scoped, not universal claims.
 
 The six unreachable historical pins were not silently substituted. The owner's decision authorized fresh pins for those same six repositories; the original hashes and their older outcomes remain in the historical sections below. The four still-available original pins were rerun unchanged.
 
-## Final-SHA rerun — 2026-09-27, ReleaseProof `2357e45`
+## Final-SHA rerun — 2026-09-28, ReleaseProof `a3524f56`
 
 | Repository | Pin | Exact SHA | Target / toolchain | Result | Evidence and limitation |
 | --- | --- | --- | --- | --- | --- |
@@ -18,17 +18,17 @@ The six unreachable historical pins were not silently substituted. The owner's d
 | [vite-plugin-inspect](https://github.com/sapphi-red/vite-plugin-inspect) | original | `87be12718b1abc56c42e7024b08f41546b08951e` | root; Vite, pnpm 10.7.1 | **NOT_READY 75** | Clean install passed; build failed in upstream Node ESM loading on Windows with `ERR_UNSUPPORTED_ESM_URL_SCHEME` for a `c:` URL. One evidenced blocker; browser could not run after build failure. |
 | [node-express-realworld-example-app](https://github.com/gothinkster/node-express-realworld-example-app) | original | `30b68e1e881462b2f4164ea09ab4c4f5699c7b0b` | root; Express/API, npm lockfile | **READY 100** | Install/build/start and API route evidence passed. Browser correctly SKIPPED for API-only target. |
 | [hackathon-starter](https://github.com/sahat/hackathon-starter) | refreshed | `410fccec23f6d4b509397b408ba7745f0f469027` | root; Express, npm lockfile | **INCOMPLETE 75** | Process remained alive, but source-declared port 8080 did not become ready within 60s. Evidence cannot distinguish slow startup, external dependency or misconfiguration. 0 blockers, 1 unknown; browser skipped. |
-| [fastapi-realworld-example-app](https://github.com/nsidnev/fastapi-realworld-example-app) | original | `029eb7781c60d5f563ee8990a0cbfb79b244538c` | root; FastAPI, Poetry lock; Python 3.12.14 | **INCOMPLETE 72** | A single workspace-local interpreter was used for install/start selection; install required an unavailable native build toolchain for old `asyncpg`. 0 blockers, 1 unknown; dependent startup not attempted, browser skipped. |
+| [fastapi-realworld-example-app](https://github.com/nsidnev/fastapi-realworld-example-app) | original | `029eb7781c60d5f563ee8990a0cbfb79b244538c` | root; FastAPI, Poetry lock; Python 3.12.14 | **INCOMPLETE 43** | Poetry was detected but this milestone has no verified Poetry install environment. 0 blockers, 1 unknown, 1 warning; dependent startup not attempted, browser skipped. |
 | [fastapi-microservices](https://github.com/Kludex/fastapi-microservices) | refreshed | `262bd1b7a97d6a6375067abac778bb8d75bb5edc` | root and `users/`; Python 3.12.14 | **INCOMPLETE 56 root; INCOMPLETE 80 users/** | Root has no runnable target, so no runtime proof. `users/` install identifies pinned `uvloop==0.15.2` as unsupported on Windows. Both are 0 blockers/1 unknown; browser skipped/not applicable. |
 | [todomvc](https://github.com/tastejs/todomvc) | refreshed | `ff43b02e59dfa604386bb382034b2cd07c2bcd8a` | repository root; Express dependencies, npm lockfile | **INCOMPLETE 83** | Root has no supported build/start target; README commands scoped to nested `examples/react` do not prove root runtime. 0 blockers, 1 unknown; browser skipped. |
 
-Totals across the ten repositories: **3 READY, 1 NOT_READY, 6 INCOMPLETE** (the FastAPI microservices root and `users/` are two targets within one repository; there are 11 target runs). No confirmed false blocker was observed. `hackathon-starter` remains unresolved and correctly incomplete; the `vite-plugin-inspect` build failure is supported by Windows build evidence. Reports remain local under temporary checkouts and were not committed because they contain machine-specific paths/logs; the table records bounded, redacted conclusions. pnpm was pinned to 8.15.9 (taxonomy), 9.15.9 (leerob/site), 10.7.1 (vite-plugin-inspect) and 12.3.4 (vitesse-lite); the final Vitesse rerun verified that manager and reported READY. Python targets used Python 3.12.14. This corpus is diagnostic Windows evidence, not a universal outcome guarantee.
+Totals across the ten repositories: **3 READY, 1 NOT_READY, 6 INCOMPLETE** (the FastAPI microservices root and `users/` are two targets within one repository; there are 11 target runs). No confirmed false blocker was observed. `hackathon-starter` remains unresolved and correctly incomplete; the `vite-plugin-inspect` build failure is supported by Windows build evidence. Reports were inspected from the ignored `.temp/realworld-a3524f56` clean checkouts and are not committed because they contain machine-specific paths/logs; the table records bounded, redacted conclusions. pnpm was pinned to 8.15.9 (taxonomy), 9.15.9 (leerob/site), 10.7.1 (vite-plugin-inspect) and 12.3.4 (vitesse-lite); the final Vitesse rerun verified that manager and reported READY. This corpus is diagnostic Windows evidence, not a universal outcome guarantee.
 
-## Previous ReleaseProof source `6455c50` — historical snapshot from 2026-09-27
+## Previous ReleaseProof source `2357e45` — historical snapshot from 2026-09-27
 
-This is the prior table retained verbatim in outcome meaning before the `2357e45` rerun. It used the same repository pins and environment. Do not combine its values with the current table or treat score changes as upstream changes.
+This is the prior table retained verbatim in outcome meaning before the `a3524f56` rerun. It used the same repository pins and environment. Do not combine its values with the current table or treat score changes as upstream changes.
 
-| Repository | Exact SHA | Result on `6455c50` | Evidence boundary |
+| Repository | Exact SHA | Result on `2357e45` | Evidence boundary |
 | --- | --- | --- | --- |
 | Next.js-Boilerplate | `9df22d0980702729da01c4465b9fb8ca292d6cce` | INCOMPLETE 71 | PostgreSQL unavailable for build; 0 blockers, 1 unknown, 1 warning. |
 | taxonomy | `298a8857c7128a0d121e7f699dfd729f23b3966d` | INCOMPLETE 79 | Required project env absent; 0 blockers, 1 unknown. |

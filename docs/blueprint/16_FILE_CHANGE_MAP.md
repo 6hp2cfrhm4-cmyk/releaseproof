@@ -21,7 +21,7 @@ This maps **inspected existing paths** to likely work. New paths are proposals i
 | Docs | `README.md`, `ARCHITECTURE.md`, `CONTRIBUTING.md`, `SECURITY.md`, `docs/{REAL_WORLD_VALIDATION,RELEASE_PROVENANCE}.md` | update only after implementation evidence; correct stale claims and 36-fixture PR template |
 | Workspace | `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `tsconfig.base.json` | add Desktop workspace/scripts/deps; keep frozen reproducible |
 
-At the 2026-09-27 blueprint snapshot, the only dirty tracked file is `apps/desktop/e2e/installed-app.mjs`, expanding packaged UI coverage for the trust acknowledgement and READY/NOT_READY/INCOMPLETE outcomes. Preserve and review it; do not reset or overwrite it. Always repeat `git status` before implementation because this status is time-specific.
+The packaged-flow changes in `apps/desktop/e2e/installed-app.mjs` are now committed on the implementation source and are covered by exact-head CI. Treat this map as responsibility guidance, not as a promise that a path is currently dirty. Always repeat `git status` before any follow-up work, preserve valid user changes, and do not reset or overwrite unrelated files.
 
 ## Proposed new paths
 
