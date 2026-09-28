@@ -4,17 +4,17 @@ This ledger tracks Stage B against [17_ACCEPTANCE_CRITERIA.md](17_ACCEPTANCE_CRI
 
 ## Final implementation checkpoint — 2026-09-28
 
-- **Implementation source:** branch `codex/core-hardening-before-desktop`, commit `a3524f56c69982ead3b0901aeed638c3ac9171dd` (`test(desktop): align parity harness with typed worker protocol`). The tracked worktree was clean when this checkpoint was verified; ignored build, benchmark and `.releaseproof` artifacts are disposable.
+- **Final branch source:** branch `codex/core-hardening-before-desktop`, commit `eea13253db393a3e3449802c505042e1c4c7b859` (`docs: reconcile final implementation evidence`). This is a documentation-only commit on top of runtime implementation `a3524f56c69982ead3b0901aeed638c3ac9171dd`; no verifier, CLI, Desktop or lockfile code changed. The tracked worktree was clean when this checkpoint was verified; ignored build, benchmark and `.releaseproof` artifacts are disposable.
 - **PR:** [Draft #1](https://github.com/6hp2cfrhm4-cmyk/releaseproof/pull/1), open and unmerged. Pushing this development branch is authorized; merge, release, npm publication and tag movement are not.
 - **Historical release:** `v0.1.0` resolves to `d03eae2e2b828d551d897669f0e4f4925b64ab14`; the published `releaseproof-0.1.0.tgz` remains unchanged with digest `5192a4d98a48704afdff5c6f67b0889918564505c17ab898a58c6c13e683e65a`.
 
 ## Exact-head CI evidence
 
-[Run 36344233294](https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/runs/36344233294) checked out the submitted head `a3524f56c69982ead3b0901aeed638c3ac9171dd` and passed all nine required jobs:
+[Run 36385364473](https://github.com/6hp2cfrhm4-cmyk/releaseproof/actions/runs/36385364473) checked out the submitted head `eea13253db393a3e3449802c505042e1c4c7b859` and passed all nine required jobs:
 
 | Job | Result / evidence |
 | --- | --- |
-| Ubuntu Node 20 | PASS; authoritative benchmark source `a3524f56`, clean source, 42 fixtures, TP 12 / TN 30 / FP 0 / FN 0, zero expectation mismatches and execution errors |
+| Ubuntu Node 20 | PASS; authoritative benchmark source `eea1325`, clean source, 42 fixtures, TP 12 / TN 30 / FP 0 / FN 0, zero expectation mismatches and execution errors |
 | Windows Node 20 | PASS; same authoritative benchmark metrics and clean source |
 | Ubuntu Node 22 | PASS; build, typecheck, tests, FAST smoke and dogfood |
 | Windows Node 22 | PASS; build, typecheck, tests, FAST smoke and dogfood |
@@ -24,20 +24,20 @@ This ledger tracks Stage B against [17_ACCEPTANCE_CRITERIA.md](17_ACCEPTANCE_CRI
 | Bundled CLI Tarball E2E | PASS; packed artifact installed outside the workspace and executed |
 | Desktop build / Windows installer smoke | PASS; parity, NSIS build, checksum, install/launch/verify/cancel/close/uninstall |
 
-The CI job generated `ReleaseProof-Setup-0.2.0-dev.0.exe`. The installer SHA-256 printed by the job is `bdd1182e355ef8aba6d6f251d65647fc25a01186eb2f0fe89a9d3419dc85ac7b`; the uploaded artifact zip digest is `b4f2ff1635cf9d3655c458f47598331b2f36edb4ad6bed3cc0a890b64778b7b1`.
+The CI job generated `ReleaseProof-Setup-0.2.0-dev.0.exe`. The installer SHA-256 printed by the job is `80c20e4bddd7a75636975e593f2fe406f30bdea126d34f6eafb06e07a0620fce`; the uploaded artifact zip digest is `5250e7eeee8809b71bf8db047d93c3ac772ed43eb7b5e20adb2f8114478262a9`.
 
 ## Local verification on the implementation source
 
-- `pnpm install --frozen-lockfile`: PASS.
-- `pnpm run build`: PASS.
-- `pnpm run lint`: PASS.
-- `pnpm test`: 30 files, 117 passed, 2 skipped. The skips are legitimate platform guards: POSIX-only symlink redirection on Windows and native Windows SIGINT simulation on Windows; both execute on their supported CI platforms.
+- `pnpm install --frozen-lockfile`: PASS on runtime implementation source.
+- `pnpm run build`: PASS on runtime implementation source.
+- `pnpm run lint`: PASS on runtime implementation source.
+- `pnpm test`: 30 files, 117 passed, 2 skipped on runtime implementation source. The skips are legitimate platform guards: POSIX-only symlink redirection on Windows and native Windows SIGINT simulation on Windows; both execute on their supported CI platforms.
 - Desktop five-case parity: PASS for healthy READY, build failure NOT_READY, runtime failure NOT_READY, browser failure NOT_READY and external dependency INCOMPLETE.
 - Local packaged Windows application E2E: PASS for installed launch without Node/pnpm/Corepack, real verification, reports/AI handoff, themes/accessibility semantics, Cancel, close-during-run cleanup and silent uninstall. Hosted CI is the authoritative final-source installer evidence.
 
 ## Final real-world corpus
 
-`docs/REAL_WORLD_VALIDATION.md` records the 2026-09-28 rerun using the implementation source `a3524f56c69982ead3b0901aeed638c3ac9171dd`, the same ten repositories and approved refreshed pins. There are 11 target runs because `fastapi-microservices` has root and `users/` targets. Windows 11 / Node 24.19.0 / bundled Python 3.12.14 was used with compatible pinned pnpm versions. Results: 3 READY, 1 NOT_READY, 6 INCOMPLETE; no confirmed false blocker. Historical six unreachable SHAs and the prior `2357e45` table remain separate.
+`docs/REAL_WORLD_VALIDATION.md` records the 2026-09-28 rerun using runtime implementation source `a3524f56c69982ead3b0901aeed638c3ac9171dd`; the final branch head adds documentation only. The same ten repositories and approved refreshed pins produced 11 target runs because `fastapi-microservices` has root and `users/` targets. Windows 11 / Node 24.19.0 / bundled Python 3.12.14 was used with compatible pinned pnpm versions. Results: 3 READY, 1 NOT_READY, 6 INCOMPLETE; no confirmed false blocker. Historical six unreachable SHAs and the prior `2357e45` table remain separate.
 
 | Target | Result | Important evidence boundary |
 | --- | --- | --- |
